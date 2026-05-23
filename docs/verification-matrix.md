@@ -6,6 +6,15 @@
 | R2-001 | Round 2 | Document schema distinguishes `raw_html` and `cleaned_text`. | `tests/test_html_parser.py::test_parser_preserves_raw_html_and_extracts_cleaned_text` | Implemented |
 | R2-002 | Round 2 | HTML parser removes `script`, `style`, and `noscript` content. | `tests/test_html_parser.py::test_parser_removes_script_style_and_noscript_content` | Implemented |
 | R2-003 | Round 2 | Title is selected from `<title>`, then `<h1>`, then `doc_id`. | `tests/test_html_parser.py::test_parser_preserves_raw_html_and_extracts_cleaned_text`; `tests/test_html_parser.py::test_parser_uses_h1_title_when_title_tag_is_missing`; `tests/test_html_parser.py::test_parser_falls_back_to_doc_id_when_title_and_h1_are_missing` | Implemented |
+| R3-001 | Round 3 | Load all `data/*.html` documents using filename stem as `doc_id`. | `tests/test_documents.py::test_load_documents_uses_html_filename_stem_as_doc_id` | Implemented |
+| R3-002 | Round 3 | All loaded HTML documents pass through the parser before storage. | `tests/test_documents.py::test_all_loaded_html_passes_through_parser` | Implemented |
+| R3-003 | Round 3 | DocumentStore keeps an in-memory copy and returns copied containers. | `tests/test_documents.py::test_document_store_keeps_loaded_documents_in_memory_copy`; `tests/test_documents.py::test_document_store_returns_copied_containers` | Implemented |
+| R4-001 | Round 4 | v1 deterministic keyword search scores title/body matches using 7/3 weights. | `tests/test_key_search.py::test_search_scores_title_matches_with_weight_7_and_body_matches_with_weight_3`; `tests/test_key_search.py::test_search_adds_title_and_body_scores_and_sorts_ties_by_id` | Implemented |
+| R4-002 | Round 4 | v1 deterministic search returns short snippets. | `tests/test_key_search.py::test_search_returns_short_snippet_around_body_match` | Implemented |
+| R4-003 | Round 4 | v1 deterministic search sorts by score descending, then id ascending. | `tests/test_key_search.py::test_search_adds_title_and_body_scores_and_sorts_ties_by_id`; `tests/test_key_search.py::test_v1_search_endpoint_returns_real_loaded_documents_sorted` | Implemented |
+| R4-004 | Round 4 | `/v1/search` exposes deterministic search over loaded documents. | `tests/test_key_search.py::test_v1_search_endpoint_returns_real_loaded_documents_sorted` | Implemented |
+| R4-005 | Round 4 Review | `/v1/search?q=&` treats `&` as the intended literal query for upstream compatibility. | `tests/test_key_search.py::test_v1_search_endpoint_treats_literal_q_ampersand_as_ampersand_query` | Implemented |
+| R4-006 | Round 4 Review | `OOM` search reflects actual fixture data and does not return `sop-003`. | `tests/test_key_search.py::test_v1_search_oom_matches_actual_data_without_sop_003` | Implemented |
 | V1-001 | v1 | Import or load SOP HTML documents. | Pending unit and integration tests. | Pending |
 | V1-002 | v1 | Keyword search returns matching SOP documents. | Pending unit, integration, and system tests. | Pending |
 | V1-003 | v1 | Search excludes `script` tag content. | Pending regression test for `replication`. | Pending |
