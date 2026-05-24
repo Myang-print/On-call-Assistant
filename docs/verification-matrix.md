@@ -40,12 +40,24 @@
 | R11-002 | Round 11 | Hybrid search returns reranked results after score merge. | `tests/test_reranker.py::test_hybrid_search_returns_deterministically_reranked_results` | Implemented |
 | R11-003 | Round 11 | `/v2/search` is connected to hybrid search and returns deterministic reranked results. | `tests/test_v2_api.py::test_v2_search_server_down_ranks_backend_and_sre_near_top`; `tests/test_v2_api.py::test_v2_search_hacker_attack_ranks_security_first`; `tests/test_v2_api.py::test_v2_search_machine_learning_model_issue_ranks_ai_first`; `tests/test_v2_api.py::test_v2_search_returns_deterministically_reranked_results` | Implemented |
 | R11-004 | Round 11 | GoldenDataset evaluation is recorded for hybrid + deterministic reranker with embedding skipped by default. | `case_count=12`; `Recall@5=0.75`; `MRR=0.75`; `embedding_evaluation=skipped_default_disabled` | Implemented |
-| V1-001 | v1 | Import or load SOP HTML documents. | Pending unit and integration tests. | Pending |
-| V1-002 | v1 | Keyword search returns matching SOP documents. | Pending unit, integration, and system tests. | Pending |
-| V1-003 | v1 | Search excludes `script` tag content. | Pending regression test for `replication`. | Pending |
-| V2-001 | v2 | GoldenDataset covers semantic search expectations. | Pending GoldenDataset tests. | Pending |
-| V2-002 | v2 | Semantic expansion improves v1 search. | Pending unit and integration tests. | Pending |
-| V2-003 | v2 | Self-implemented BM25 ranks relevant documents. | Pending ranking tests. | Pending |
+| R12-001 | Round 12 | V2 integration verifies query-to-response flow through semantic retrieval, hybrid search, and deterministic reranker. | `tests/test_v2_integration.py::test_v2_complete_pipeline_from_query_to_reranked_response` | Implemented |
+| R12-002 | Round 12 | V1 and V2 GET search endpoints remain available during final V2 acceptance. | `tests/test_v2_integration.py::test_v1_and_v2_get_search_endpoints_remain_available`; `tests/test_v2_api.py` | Implemented |
+| R12-003 | Round 12 | Unsupported V1 document POST fails closed because document ingestion API is not implemented in current backend-only scope. | `tests/test_v2_integration.py::test_v1_post_document_api_is_not_implemented_and_fails_closed` | Implemented |
+| R12-004 | Round 12 | Boundary, missing, empty, whitespace, and special-symbol query inputs are handled without server error. | `tests/test_v2_integration.py::test_empty_missing_and_whitespace_queries_return_empty_results`; `tests/test_v2_integration.py::test_special_symbol_boundary_queries_are_handled_without_error` | Implemented |
+| R12-005 | Round 12 | Script-only HTML content remains unsearchable through V1 and V2 APIs. | `tests/test_v2_integration.py::test_script_only_content_is_not_searchable_in_v1_or_v2` | Implemented |
+| R12-006 | Round 12 | V2 GoldenDataset acceptance metrics are evaluated through the HTTP API. | `tests/test_v2_integration.py::test_v2_golden_dataset_evaluation_reaches_current_acceptance_baseline`; `case_count=12`; `Recall@5=0.75`; `MRR=0.75` | Implemented |
+| R13-001 | Round 13 | DocumentStore reads individual HTML files and parses them into Document objects. | `tests/test_documents.py::test_document_store_reads_single_html_file` | Implemented |
+| R13-002 | Round 13 | DocumentStore adds new HTML documents to the in-memory store without source-file overwrite. | `tests/test_documents.py::test_document_store_adds_html_document_without_overwriting_existing` | Implemented |
+| R13-003 | Round 13 | DocumentStore rejects duplicate document ids. | `tests/test_documents.py::test_document_store_rejects_duplicate_document_id` | Implemented |
+| R13-004 | Round 13 | `POST /v1/documents` creates a document and returns `id` and `title`. | `tests/test_v1_api.py::test_post_v1_documents_adds_document_and_returns_id_and_title` | Implemented |
+| R13-005 | Round 13 | `POST /v1/documents` rejects empty id/html and duplicate ids with required status codes. | `tests/test_v1_api.py::test_post_v1_documents_rejects_empty_id_or_html`; `tests/test_v1_api.py::test_post_v1_documents_rejects_duplicate_id` | Implemented |
+| R13-006 | Round 13 | Newly posted documents are searchable through both `GET /v1/search` and `GET /v2/search`. | `tests/test_v1_api.py::test_post_v1_documents_adds_document_and_returns_id_and_title`; `tests/test_v2_api.py` regression | Implemented |
+| V1-001 | v1 | Import or load SOP HTML documents. | `tests/test_documents.py`; `tests/test_v1_api.py::test_post_v1_documents_adds_document_and_returns_id_and_title` | Implemented |
+| V1-002 | v1 | Keyword search returns matching SOP documents. | `tests/test_key_search.py`; `tests/test_v1_api.py` | Implemented |
+| V1-003 | v1 | Search excludes `script` tag content. | `tests/test_v1_api.py::test_v1_search_excludes_script_content`; `tests/test_v2_integration.py::test_script_only_content_is_not_searchable_in_v1_or_v2` | Implemented |
+| V2-001 | v2 | GoldenDataset covers semantic search expectations. | `tests/test_evaluator.py`; `tests/test_v2_integration.py::test_v2_golden_dataset_evaluation_reaches_current_acceptance_baseline` | Implemented |
+| V2-002 | v2 | Semantic expansion improves v1 search. | `tests/test_semantic_search.py`; `tests/test_v2_integration.py::test_v2_complete_pipeline_from_query_to_reranked_response` | Implemented |
+| V2-003 | v2 | Self-implemented BM25 ranks relevant documents. | `tests/test_bm25_retriever.py`; `tests/test_hybrid_search.py`; `tests/test_v2_api.py` | Implemented |
 | V2-004 | v2 | Embedding technical stack and model are user-approved. | Stop-and-ask checkpoint. | Pending |
 | V2-005 | v2 | HybridMerge and reranker are evaluated. | Round 11 GoldenDataset evaluation: `Recall@5=0.75`, `MRR=0.75`; embedding evaluation skipped because embedding is disabled by default. | Implemented |
 | V3-001 | v3 | Agent uses only `readFile(fname)` for SOP access. | Pending after v2 completion and user protocol. | Pending |

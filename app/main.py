@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Request
+from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Request, status
 
 from app.documents import DocumentStore
 from app.hybrid_search import hybrid_search_documents
@@ -13,9 +14,31 @@ document_store = DocumentStore.from_data_dir()
 domain_dictionary = load_domain_dictionary(DATA_DIR / "domain_dictionary.json")
 
 
+class DocumentCreateRequest(BaseModel):
+    id: str
+    html: str
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/v1/documents", status_code=status.HTTP_201_CREATED)
+def create_v1_document(payload: DocumentCreateRequest) -> dict[str, str]:
+    doc_id = payload.id.strip()
+    raw_html = payload.html.strip()
+    if not doc_id or not raw_html:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="id and html are required")
+
+    try:
+        document = document_store.add_html_document(doc_id, raw_html)
+    except ValueError as error:
+        if str(error) == "duplicate document id":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        raise
+
+    return {"id": document.doc_id, "title": document.title}
 
 
 @app.get("/v1/search")

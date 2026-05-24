@@ -74,3 +74,49 @@ def test_document_store_returns_copied_containers() -> None:
     assert first_snapshot == []
     assert len(store.all()) == 10
     assert store.get("missing") is None
+
+
+def test_document_store_reads_single_html_file() -> None:
+    html_file = DATA_DIR / "sop-001.html"
+
+    document = DocumentStore.read_html_file(html_file)
+
+    logger.info("read_html_file_document=%s", document)
+    assert document.doc_id == "sop-001"
+    assert document.title == "后端服务 On-Call SOP"
+    assert "OOM" in document.cleaned_text
+
+
+def test_document_store_adds_html_document_without_overwriting_existing() -> None:
+    store = DocumentStore([])
+
+    document = store.add_html_document(
+        "manual-sop",
+        "<html><head><title>Manual SOP</title></head><body><p>unique-round13-token</p></body></html>",
+    )
+
+    logger.info("added_document=%s", document)
+    assert document.title == "Manual SOP"
+    assert store.get("manual-sop") == document
+    assert "unique-round13-token" in store.all()[0].cleaned_text
+
+
+def test_document_store_rejects_duplicate_document_id() -> None:
+    store = DocumentStore(
+        [
+            Document(
+                doc_id="manual-sop",
+                raw_html="<html><body>first</body></html>",
+                title="manual-sop",
+                cleaned_text="first",
+            )
+        ]
+    )
+
+    try:
+        store.add_html_document("manual-sop", "<html><body>second</body></html>")
+    except ValueError as error:
+        logger.info("duplicate_error=%s", error)
+        assert str(error) == "duplicate document id"
+    else:
+        raise AssertionError("expected duplicate document id error")
