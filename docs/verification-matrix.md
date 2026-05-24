@@ -22,6 +22,13 @@
 | R5-003 | Round 5 | MRR is calculated correctly. | `tests/test_evaluator.py::test_mrr_uses_first_relevant_rank_per_query` | Implemented |
 | R5-004 | Round 5 | Evaluator can score a temporary mock retriever without implementing v2 search. | `tests/test_evaluator.py::test_evaluator_uses_temp_mock_retriever_and_reports_metrics` | Implemented |
 | R5-005 | Round 5 Review | Golden Dataset covers 5 normal, 3 synonym, 2 boundary, and 2 multi-document cases. | `tests/test_evaluator.py::test_golden_dataset_covers_required_case_categories` | Implemented |
+| R6-001 | Round 6 | Semantic expansion loads required domain dictionary entries. | `tests/test_semantic_search.py::test_load_domain_dictionary_contains_required_expansions` | Implemented |
+| R6-002 | Round 6 | Semantic expansion expands queries using domain dictionary terms. | `tests/test_semantic_search.py::test_expand_query_uses_domain_dictionary_terms` | Implemented |
+| R6-003 | Round 6 | Semantic expansion ranks expected SOPs for server, security, and AI issue queries without modifying v1. | `tests/test_semantic_search.py::test_semantic_search_ranks_backend_and_sre_for_server_down_query`; `tests/test_semantic_search.py::test_semantic_search_ranks_security_for_hacker_attack_query`; `tests/test_semantic_search.py::test_semantic_search_ranks_ai_for_machine_learning_model_issue_query` | Implemented |
+| R6-004 | Round 6 | Domain dictionary expansion coverage includes `sop-001` through `sop-010`. | `tests/test_semantic_search.py::test_domain_dictionary_expansion_covers_sop_001_to_sop_010` | Implemented |
+| R7-001 | Round 7 | `/v2/search` route connects semantic expansion retrieval through the HTTP layer. | Human test: `服务器挂了`, `黑客攻击`, `机器学习模型出问题` returned expected documents near top. | Implemented |
+| R8-001 | Round 8 | BM25 ranks repeated relevant terms higher and sorts by score first, then id. | `tests/test_bm25_retriever.py::test_bm25_rank_scores_repeated_relevant_terms_higher`; `tests/test_bm25_retriever.py::test_bm25_rank_sorts_by_score_first_then_doc_id` | Implemented |
+| R8-002 | Round 8 | v2 route uses BM25-improved retrieval for required semantic queries. | `tests/test_v2_api.py::test_v2_search_server_down_ranks_backend_and_sre_near_top`; `tests/test_v2_api.py::test_v2_search_hacker_attack_ranks_security_first`; `tests/test_v2_api.py::test_v2_search_machine_learning_model_issue_ranks_ai_first` | Implemented |
 | V1-001 | v1 | Import or load SOP HTML documents. | Pending unit and integration tests. | Pending |
 | V1-002 | v1 | Keyword search returns matching SOP documents. | Pending unit, integration, and system tests. | Pending |
 | V1-003 | v1 | Search excludes `script` tag content. | Pending regression test for `replication`. | Pending |

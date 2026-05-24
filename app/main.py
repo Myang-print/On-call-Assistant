@@ -2,11 +2,14 @@ from fastapi import FastAPI, Request
 
 from app.documents import DocumentStore
 from app.key_search import search_documents
+from app.semantic_search import load_domain_dictionary, semantic_search_documents
+from app.settings import DATA_DIR
 
 
 app = FastAPI(title="On-Call Assistant")
 # Process-local document snapshot keeps v1 request handling deterministic.
 document_store = DocumentStore.from_data_dir()
+domain_dictionary = load_domain_dictionary(DATA_DIR / "domain_dictionary.json")
 
 
 @app.get("/health")
@@ -18,6 +21,15 @@ def health() -> dict[str, str]:
 def v1_search(request: Request, q: str = "") -> dict[str, object]:
     query = _normalize_v1_query(request, q)
     return {"query": query, "results": search_documents(document_store.all(), query)}
+
+
+@app.get("/v2/search")
+def v2_search(request: Request, q: str = "") -> dict[str, object]:
+    query = _normalize_v1_query(request, q)
+    return {
+        "query": query,
+        "results": semantic_search_documents(document_store.all(), query, domain_dictionary),
+    }
 
 
 def _normalize_v1_query(request: Request, parsed_q: str) -> str:
