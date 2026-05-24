@@ -48,13 +48,21 @@ def test_v1_and_v2_get_search_endpoints_remain_available() -> None:
     assert _ids(v2_response.json())[0] == "sop-005"
 
 
-def test_v1_post_document_api_is_not_implemented_and_fails_closed() -> None:
+def test_v1_post_document_api_rejects_invalid_payload() -> None:
     client = _client()
 
-    response = client.post("/v1/documents", json={"id": "empty", "html": ""})
+    empty_html_response = client.post("/v1/documents", json={"id": "empty", "html": ""})
+    missing_html_response = client.post("/v1/documents", json={"id": "missing-html"})
 
-    logger.info("v1_post_documents_status=%s body=%s", response.status_code, response.text)
-    assert response.status_code == 404
+    logger.info(
+        "v1_post_empty_html_status=%s body=%s missing_html_status=%s body=%s",
+        empty_html_response.status_code,
+        empty_html_response.text,
+        missing_html_response.status_code,
+        missing_html_response.text,
+    )
+    assert empty_html_response.status_code == 400
+    assert missing_html_response.status_code == 422
 
 
 def test_empty_missing_and_whitespace_queries_return_empty_results() -> None:
