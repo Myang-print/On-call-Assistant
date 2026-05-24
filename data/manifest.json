@@ -1,0 +1,152 @@
+[
+  {
+    "doc_id": "sop-001",
+    "filename": "sop-001.html",
+    "title": "后端服务 On-Call SOP",
+    "keywords": [
+      "OOM",
+      "慢查询",
+      "后端服务",
+      "On-Call",
+      "SOP",
+      "文档编号",
+      "SOP-001",
+      "版本"
+    ]
+  },
+  {
+    "doc_id": "sop-002",
+    "filename": "sop-002.html",
+    "title": "数据库DBA On-Call SOP",
+    "keywords": [
+      "ETL",
+      "主从延迟",
+      "慢查询",
+      "数据库",
+      "DBA",
+      "On-Call",
+      "SOP",
+      "文档编号"
+    ]
+  },
+  {
+    "doc_id": "sop-003",
+    "filename": "sop-003.html",
+    "title": "前端Web On-Call SOP & 故障处理指南",
+    "keywords": [
+      "CDN",
+      "DNS",
+      "页面白屏",
+      "前端",
+      "Web",
+      "On-Call",
+      "SOP",
+      "故障处理指南"
+    ]
+  },
+  {
+    "doc_id": "sop-004",
+    "filename": "sop-004.html",
+    "title": "SRE基础设施 On-Call SOP",
+    "keywords": [
+      "DNS",
+      "K8s",
+      "SRE",
+      "基础设施",
+      "On-Call",
+      "SOP",
+      "文档编号",
+      "SOP-004"
+    ]
+  },
+  {
+    "doc_id": "sop-005",
+    "filename": "sop-005.html",
+    "title": "信息安全 On-Call SOP",
+    "keywords": [
+      "DDoS",
+      "信息安全",
+      "On-Call",
+      "SOP",
+      "文档编号",
+      "SOP-005",
+      "版本",
+      "v6"
+    ]
+  },
+  {
+    "doc_id": "sop-006",
+    "filename": "sop-006.html",
+    "title": "数据平台 On-Call SOP",
+    "keywords": [
+      "ETL",
+      "Spark",
+      "数据平台",
+      "On-Call",
+      "SOP",
+      "文档编号",
+      "SOP-006",
+      "版本"
+    ]
+  },
+  {
+    "doc_id": "sop-007",
+    "filename": "sop-007.html",
+    "title": "移动客户端 On-Call SOP",
+    "keywords": [
+      "OOM",
+      "DNS",
+      "移动客户端",
+      "On-Call",
+      "SOP",
+      "文档编号",
+      "SOP-007",
+      "版本"
+    ]
+  },
+  {
+    "doc_id": "sop-008",
+    "filename": "sop-008.html",
+    "title": "AI算法 On-Call SOP & 模型服务故障处理指南",
+    "keywords": [
+      "GPU",
+      "AI",
+      "算法",
+      "On-Call",
+      "SOP",
+      "模型服务故障处理指南",
+      "文档编号",
+      "SOP-008"
+    ]
+  },
+  {
+    "doc_id": "sop-009",
+    "filename": "sop-009.html",
+    "title": "QA质量保障 On-Call SOP",
+    "keywords": [
+      "自动化测试",
+      "QA",
+      "质量保障",
+      "On-Call",
+      "SOP",
+      "文档编号",
+      "SOP-009",
+      "版本"
+    ]
+  },
+  {
+    "doc_id": "sop-010",
+    "filename": "sop-010.html",
+    "title": "网络与CDN On-Call SOP",
+    "keywords": [
+      "DDoS",
+      "CDN",
+      "DNS",
+      "网络与",
+      "On-Call",
+      "SOP",
+      "网络",
+      "文档编号"
+    ]
+  }
+]
