@@ -7,6 +7,7 @@ SNIPPET_MAX_LENGTH = 80
 
 
 def search_documents(documents: list[Document], query: str) -> list[dict[str, object]]:
+    # v1 search is intentionally deterministic: no tokenization, model calls, or external state.
     normalized_query = query.strip()
     if not normalized_query:
         return []
@@ -15,6 +16,7 @@ def search_documents(documents: list[Document], query: str) -> list[dict[str, ob
     query_folded = normalized_query.casefold()
 
     for document in documents:
+        # Title/body weighting is the public ranking contract for v1.
         title_matches = query_folded in document.title.casefold()
         body_matches = query_folded in document.cleaned_text.casefold()
         score = 0.0
@@ -33,6 +35,7 @@ def search_documents(documents: list[Document], query: str) -> list[dict[str, ob
                 }
             )
 
+    # Tie-break by id so equal scores are stable across Python/runtime versions.
     return sorted(results, key=lambda result: (-float(result["score"]), str(result["id"])))
 
 
@@ -44,6 +47,7 @@ def _make_snippet(text: str, query: str) -> str:
     if match_index == -1:
         return text[:SNIPPET_MAX_LENGTH]
 
+    # Center snippets around the first match while preserving a hard maximum length.
     half_window = SNIPPET_MAX_LENGTH // 2
     start = max(0, match_index - half_window)
     end = min(len(text), start + SNIPPET_MAX_LENGTH)

@@ -8,6 +8,7 @@ from app.settings import DATA_DIR
 def load_documents_from_data_dir(data_dir: Path = DATA_DIR) -> list[Document]:
     documents: list[Document] = []
 
+    # Stable filename ordering keeps deterministic load and search behavior.
     for html_file in sorted(Path(data_dir).glob("*.html")):
         raw_html = html_file.read_text(encoding="utf-8")
         documents.append(parse_html_document(doc_id=html_file.stem, raw_html=raw_html))
@@ -17,6 +18,7 @@ def load_documents_from_data_dir(data_dir: Path = DATA_DIR) -> list[Document]:
 
 class DocumentStore:
     def __init__(self, documents: list[Document]) -> None:
+        # Store an in-memory snapshot so later file changes cannot affect active queries.
         self._documents_by_id = {document.doc_id: document for document in documents}
 
     @classmethod
@@ -27,4 +29,5 @@ class DocumentStore:
         return self._documents_by_id.get(doc_id)
 
     def all(self) -> list[Document]:
+        # Return a container copy to prevent callers from mutating store internals.
         return list(self._documents_by_id.values())

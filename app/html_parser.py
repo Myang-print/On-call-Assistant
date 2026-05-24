@@ -6,6 +6,7 @@ from app.models import Document
 def parse_html_document(doc_id: str, raw_html: str) -> Document:
     soup = BeautifulSoup(raw_html, "html.parser")
 
+    # Searchable text must exclude executable and fallback-only content.
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
 
@@ -21,6 +22,7 @@ def parse_html_document(doc_id: str, raw_html: str) -> Document:
 
 
 def _extract_title(soup: BeautifulSoup, doc_id: str) -> str:
+    # Title fallback order is part of the document identity contract.
     title_tag = soup.find("title")
     if title_tag:
         title = title_tag.get_text(strip=True)

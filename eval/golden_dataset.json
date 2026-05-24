@@ -1,0 +1,62 @@
+[
+  {
+    "query": "服务器挂了",
+    "category": "normal",
+    "relevant_doc_ids": ["sop-001", "sop-004"]
+  },
+  {
+    "query": "黑客攻击",
+    "category": "normal",
+    "relevant_doc_ids": ["sop-005"]
+  },
+  {
+    "query": "机器学习模型出问题",
+    "category": "normal",
+    "relevant_doc_ids": ["sop-008"]
+  },
+  {
+    "query": "数据库主从延迟超过30秒",
+    "category": "normal",
+    "relevant_doc_ids": ["sop-002"]
+  },
+  {
+    "query": "CDN节点故障",
+    "category": "normal",
+    "relevant_doc_ids": ["sop-010"]
+  },
+  {
+    "query": "系统被人打了",
+    "category": "synonym",
+    "relevant_doc_ids": ["sop-005"]
+  },
+  {
+    "query": "服务响应特别慢",
+    "category": "synonym",
+    "relevant_doc_ids": ["sop-001"]
+  },
+  {
+    "query": "推荐不准了",
+    "category": "synonym",
+    "relevant_doc_ids": ["sop-008"]
+  },
+  {
+    "query": "OOM",
+    "category": "boundary",
+    "relevant_doc_ids": ["sop-001", "sop-007"]
+  },
+  {
+    "query": "&",
+    "category": "boundary",
+    "relevant_doc_ids": ["sop-003", "sop-008", "sop-010"]
+  },
+  {
+    "query": "P0故障响应流程",
+    "category": "multi_document",
+    "relevant_doc_ids": ["sop-001", "sop-004", "sop-010"]
+  },
+  {
+    "query": "连接池满导致服务异常",
+    "category": "multi_document",
+    "relevant_doc_ids": ["sop-001", "sop-002"]
+  }
+]

@@ -15,6 +15,13 @@
 | R4-004 | Round 4 | `/v1/search` exposes deterministic search over loaded documents. | `tests/test_key_search.py::test_v1_search_endpoint_returns_real_loaded_documents_sorted` | Implemented |
 | R4-005 | Round 4 Review | `/v1/search?q=&` treats `&` as the intended literal query for upstream compatibility. | `tests/test_key_search.py::test_v1_search_endpoint_treats_literal_q_ampersand_as_ampersand_query` | Implemented |
 | R4-006 | Round 4 Review | `OOM` search reflects actual fixture data and does not return `sop-003`. | `tests/test_key_search.py::test_v1_search_oom_matches_actual_data_without_sop_003` | Implemented |
+| R4-007 | v1 Integration | `/v1/search` returns the expected response shape through the HTTP layer. | `tests/test_v1_api.py::test_v1_search_returns_expected_response_shape` | Implemented |
+| R4-008 | v1 Integration | v1 API validates upstream keyword cases for `OOM`, `故障`, `replication`, `CDN`, and literal `&`. | `tests/test_v1_api.py::test_v1_search_oom_uses_actual_fixture_content`; `tests/test_v1_api.py::test_v1_search_fault_returns_multiple_documents`; `tests/test_v1_api.py::test_v1_search_excludes_script_content`; `tests/test_v1_api.py::test_v1_search_cdn_orders_by_score_then_id`; `tests/test_v1_api.py::test_v1_search_literal_ampersand_boundary` | Implemented |
+| R5-001 | Round 5 | v2 Golden Dataset contains 12 cases including required queries: `服务器挂了`, `黑客攻击`, `机器学习模型出问题`. | `tests/test_evaluator.py::test_golden_dataset_contains_required_v2_queries` | Implemented |
+| R5-002 | Round 5 | Recall@5 is calculated correctly. | `tests/test_evaluator.py::test_recall_at_5_counts_query_hit_when_any_relevant_doc_is_in_top_5` | Implemented |
+| R5-003 | Round 5 | MRR is calculated correctly. | `tests/test_evaluator.py::test_mrr_uses_first_relevant_rank_per_query` | Implemented |
+| R5-004 | Round 5 | Evaluator can score a temporary mock retriever without implementing v2 search. | `tests/test_evaluator.py::test_evaluator_uses_temp_mock_retriever_and_reports_metrics` | Implemented |
+| R5-005 | Round 5 Review | Golden Dataset covers 5 normal, 3 synonym, 2 boundary, and 2 multi-document cases. | `tests/test_evaluator.py::test_golden_dataset_covers_required_case_categories` | Implemented |
 | V1-001 | v1 | Import or load SOP HTML documents. | Pending unit and integration tests. | Pending |
 | V1-002 | v1 | Keyword search returns matching SOP documents. | Pending unit, integration, and system tests. | Pending |
 | V1-003 | v1 | Search excludes `script` tag content. | Pending regression test for `replication`. | Pending |
