@@ -1,0 +1,7 @@
+# Optional dependencies for embedding-based v2 retrieval.
+# The core service defaults to semantic BM25 search. Set ONCALL_ENABLE_EMBEDDING=true
+# before startup to allow loading the optional embedding model.
+sentence-transformers
+
+# Preferred embedding model:
+# BAAI/bge-m3

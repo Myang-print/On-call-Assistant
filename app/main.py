@@ -1,8 +1,9 @@
 from fastapi import FastAPI, Request
 
 from app.documents import DocumentStore
+from app.hybrid_search import hybrid_search_documents
 from app.key_search import search_documents
-from app.semantic_search import load_domain_dictionary, semantic_search_documents
+from app.semantic_search import load_domain_dictionary
 from app.settings import DATA_DIR
 
 
@@ -28,7 +29,7 @@ def v2_search(request: Request, q: str = "") -> dict[str, object]:
     query = _normalize_v1_query(request, q)
     return {
         "query": query,
-        "results": semantic_search_documents(document_store.all(), query, domain_dictionary),
+        "results": hybrid_search_documents(document_store.all(), query, domain_dictionary),
     }
 
 

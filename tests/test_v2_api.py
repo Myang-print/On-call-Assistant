@@ -16,6 +16,7 @@ def test_v2_search_server_down_ranks_backend_and_sre_near_top() -> None:
 
     logger.info("server_down_body=%s", response.json())
     assert response.status_code == 200
+    assert response.json()["results"][0]["score_source"] == "hybrid score"
     top2_ids = {result["id"] for result in response.json()["results"][:2]}
     assert top2_ids == {"sop-001", "sop-004"}
 
@@ -38,3 +39,17 @@ def test_v2_search_machine_learning_model_issue_ranks_ai_first() -> None:
     logger.info("ml_model_issue_body=%s", response.json())
     assert response.status_code == 200
     assert response.json()["results"][0]["id"] == "sop-008"
+
+
+def test_v2_search_returns_deterministically_reranked_results() -> None:
+    client = TestClient(app)
+
+    response = client.get("/v2/search", params={"q": "服务器挂了"})
+
+    logger.info("v2_reranked_body=%s", response.json())
+    assert response.status_code == 200
+    ordered_pairs = [
+        (float(result["score"]), str(result["id"]))
+        for result in response.json()["results"]
+    ]
+    assert ordered_pairs == sorted(ordered_pairs, key=lambda pair: (-pair[0], pair[1]))
