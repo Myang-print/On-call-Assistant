@@ -1,158 +1,167 @@
-# 编程面试：On-Call 助手
+# On-Call Assistant
 
-## 概述
+基于 LLM 与 Tool Runtime 的智能 On-Call 助手系统，通过受控工具调用（Tool Calling）、文档检索（Retrieval）以及可观测执行流程（Trace），实现对运维场景问题的自动分析与回答。
 
-构建一个 On-Call 助手 Web 应用。`data/` 目录下有 100 份部门 On-Call SOP 的 HTML 文档（demo 提供 10 份）。
-
-- 编程语言不限
-- 可以使用任何 AI 工具辅助
-- 需要实现 HTTP API + 前端页面
-- 本题分为三个阶段，每阶段实现为独立的路由前缀（`/v1`、`/v2`、`/v3`）
-- 建议按顺序完成，每阶段只有完整实现才得分
-
-| 阶段                       | 分值 |
-| -------------------------- | ---- |
-| Phase 1：搜索引擎          | 30   |
-| Phase 2：语义搜索          | 30   |
-| Phase 3：On-Call 助手 Agent | 40   |
+项目并非仅关注模型输出能力，而是更强调 Agent 系统在工程环境中的稳定性、可控性与可观测性。开发过程中采用渐进式架构设计，从 Deterministic Runtime 开始，逐步扩展到 Tool Runtime、Retrieval Pipeline 以及 Agent 层能力。
 
 ---
 
-## 测试数据
+## 功能特性
 
-| 文件           | 部门       | 关键内容                                     |
-| -------------- | ---------- | -------------------------------------------- |
-| `sop-001.html` | 后端服务   | OOM 排查、服务超时、降级策略、故障分级       |
-| `sop-002.html` | 数据库 DBA | 主从延迟、慢查询、连接池满、数据恢复         |
-| `sop-003.html` | 前端       | 页面白屏、CDN 资源加载失败、兼容性、性能劣化 |
-| `sop-004.html` | SRE        | K8s 集群问题、监控告警、容量规划、故障响应   |
-| `sop-005.html` | 安全团队   | 安全事件分级、入侵检测、漏洞响应             |
-| `sop-006.html` | 数据平台   | 数据管道故障、ETL 失败、Spark 集群           |
-| `sop-007.html` | 移动端     | App 崩溃率、热修复、推送服务                 |
-| `sop-008.html` | AI & 算法  | 模型推理延迟、推荐质量下降、GPU 集群         |
-| `sop-009.html` | QA         | 测试环境故障、自动化测试、发版卡点           |
-| `sop-010.html` | 网络 & CDN | CDN 节点故障、DNS 异常、DDoS 防护            |
+- V1：精确检索
+- V2：语义检索（BM25 + Synonym Expansion + Embedding（可选，默认关闭 = False））
+- V3：Tool 驱动 Agent workFlow
+- 前端聊天界面与模式切换
+- 支持历史搜索记录的回退和删除
+- Tool 调用过程 Trace 侧边栏展示，可查看单步详细参数返回
+- Recovery 与 Rollback 机制
+
+当前已实现部分 Defensive Programming 能力：
+
+- 拒绝空文件名
+- 拒绝通配符访问
+- 拒绝路径穿越
+- Tool Schema 校验
+- Timeout 保护
+- 独立 Recovery 流程
 
 ---
 
-## Phase 1：搜索引擎
-
-### API
+## 系统架构
 
 ```text
-POST /v1/documents
-{ "id": "sop-001", "html": "<html>...</html>" }
-→ 201 { "id": "sop-001", "title": "后端服务 On-Call SOP" }
-
-GET /v1/search?q={query}
-→ 200 { "query": "...", "results": [{ "id": "...", "title": "...", "snippet": "...", "score": 1.0 }] }
-
-GET /v1
-→ 搜索页面（输入框 + 结果列表，前端不做要求）
+User
+   │
+Frontend UI
+   │
+Answer Composer
+   │
+Agent Runtime
+   │
+   ├── Retrieval Pipeline
+   │
+   ├── Tool Runtime
+   │          │
+   │          └── readFile()
+   │
+   └── LLM Adapter
 ```
-
-### 要求
-
-1. 实现基于关键词的文档检索
-
-### 验证
-
-| 查询                          | 期望结果                                |
-| ----------------------------- | --------------------------------------- |
-| `GET /v1/search?q=OOM`        | 返回 sop-001                            |
-| `GET /v1/search?q=故障`       | 返回多个文档（大部分 SOP 都包含"故障"） |
-| `GET /v1/search?q=replication` | 返回空（该词仅出现在 script 标签内）    |
-| `GET /v1/search?q=CDN`        | 返回 sop-003, sop-010                   |
-| `GET /v1/search?q=&`          | 返回正文中包含 & 字符的文档             |
 
 ---
 
-## Phase 2：语义搜索
-
-### API
+## 项目结构
 
 ```text
-GET /v2/search?q={query}
-→ 200 { "query": "...", "results": [{ "id": "...", "title": "...", "snippet": "...", "score": 0.87 }] }
+project/
 
-GET /v2
-→ 搜索页面（前端不做要求）
+├── app/
+│   ├── agent/
+│   ├── retrieval/
+│   ├── tool_runtime/
+│   ├── adapter/
+│   └── api/
+
+├── frontend/
+├── tests/
+├── data/
+├── docs/
+└── README.md
 ```
-
-### 要求
-
-1. 实现语义搜索，查询词不需要在文档中精确出现
-2. 结果按相关性排序
-
-### 验证
-
-| 查询                            | 期望结果                              |
-| ------------------------------- | ------------------------------------- |
-| `GET /v2/search?q=服务器挂了`   | sop-001（后端）和 sop-004（SRE）靠前 |
-| `GET /v2/search?q=黑客攻击`     | sop-005（安全团队）靠前              |
-| `GET /v2/search?q=机器学习模型出问题` | sop-008（AI 算法）靠前              |
 
 ---
 
-## Phase 3：On-Call 助手 Agent
+## 快速启动
 
-### API
+安装依赖：
+
+```bash
+pip install -r requirements.txt
+
+cd frontend
+npm install
+```
+
+配置环境变量：
+
+```bash
+cp .env.example .env
+```
+
+填写：
 
 ```text
-GET /v3
-→ 对话界面（消息输入 + 对话历史，前端不做要求）
-
-API 设计不做限定，自行定义。
+OPENAI_API_KEY=xxx
+OPENAI_BASE_URL=xxx
+MODEL=xxx
 ```
 
-### 要求
-
-1. 实现一个 Agent，通过对话回答用户的 On-Call 问题
-2. Agent 只有一个工具：`readFile(fname: string) -> string`，可读取 `data/` 目录下的任意文件，也可以往 `data/` 目录添加任意文件
-3. Agent 不能列目录、不能使用通配符，只能按文件名读取
-4. 对话过程展示 Agent 的工具调用过程
-
-### 验证
-
-| 用户提问                           | 期望行为                                                   |
-| ---------------------------------- | ---------------------------------------------------------- |
-| "数据库主从延迟超过30秒怎么处理？" | Agent 定位并读取 sop-002.html，给出处理步骤                |
-| "服务 OOM 了怎么办？"             | Agent 找到 sop-001.html，给出排查和处理建议                |
-| "P0 故障的响应流程是什么？"       | Agent 综合多个 SOP 给出完整回答                            |
-| "怀疑有人入侵了系统"             | Agent 找到 sop-005.html，给出安全事件响应流程              |
-| "推荐结果质量下降了"             | Agent 找到 sop-008.html，给出排查方向                      |
-
----
-
-## Local Development
-
-Backend:
+启动后端：
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-Frontend:
+启动前端：
 
 ```bash
 cd frontend
-npm install
+
 npm run dev
 ```
 
-The frontend is maintained under `frontend/` and calls the backend with:
+默认访问：
 
 ```text
-POST /api/oncall/query
-{ "query": "服务 OOM 了怎么办？" }
+Backend:
+http://localhost:8000
+
+API Docs:
+http://localhost:8000/docs
+
+Frontend:
+http://localhost:5173
 ```
 
-Expected response shape:
+---
 
-```json
-{
-  "query": "服务 OOM 了怎么办？",
-  "answer": "OnCallAgent completed with runtime status: finished.",
-  "trace": []
-}
+## 测试
+
+运行全部测试：
+
+```bash
+pytest
 ```
+
+运行指定模块：
+
+```bash
+pytest tests/test_tool_runtime.py
+pytest tests/test_manifest_builder.py
+```
+
+---
+
+## 开发思路
+
+```text
+项目开发顺序:
+1. Deterministic Runtime
+2. Tool System
+3. Retrieval
+4. Single Agent
+5. Multi-Agent
+```
+- 优先保证 Runtime 稳定性
+- 优先保证系统分区 功能独立 和 状态隔离
+- 优先保证 rollback 能力
+- 优先保证 实现过程可追踪性
+
+---
+
+## 后续规划
+
+- Multi-Agent 架构
+- Memory 系统
+- Evaluator
+- RAG 优化
+- Observability Dashboard
