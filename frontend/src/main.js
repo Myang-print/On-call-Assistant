@@ -1,7 +1,7 @@
 import "./styles.css";
 import { queryOnCall } from "./api/oncall.ts";
 
-const STORAGE_KEY = "ONCALL_SESSION_V3";
+const STORAGE_KEY = "ONCALL_SESSION_V4";
 
 const modeAssets = {
   exact: {
@@ -28,16 +28,29 @@ document.querySelector("#app").innerHTML = `
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-left">
-        <button class="icon-button" type="button" aria-label="Toggle sidebar">▌▌</button>
-        <button class="icon-button" type="button" data-new-chat aria-label="New chat">＋</button>
         <button class="workspace-name" type="button">OnCallAgent <span class="soft-chevron"></span></button>
       </div>
-      <button class="icon-button icon-share" type="button" aria-label="Share">
+      <a
+        class="icon-button icon-share"
+        href="https://github.com/Myang-print/On-call-Assistant.git"
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Open GitHub repository"
+      >
         <span class="soft-arrow soft-arrow-share"></span>
-      </button>
+      </a>
     </header>
 
     <main class="workspace">
+      <aside class="history-panel">
+        <div class="history-header">
+          <p>History</p>
+          <button type="button" data-history-toggle aria-label="Hide history">‹</button>
+        </div>
+        <div class="session-list" data-session-list></div>
+      </aside>
+      <button class="history-rail" type="button" data-history-toggle aria-label="Show history">History</button>
+
       <section class="conversation">
         <article class="hero-copy">
           <p class="system-line">Backend console is ready.</p>
@@ -47,11 +60,6 @@ document.querySelector("#app").innerHTML = `
 
         <section class="version-showcase" data-version-card>
           <img data-version-image alt="Version artwork" />
-        </section>
-
-        <section class="session-strip">
-          <button type="button" data-new-chat>New Chat</button>
-          <div class="session-list" data-session-list></div>
         </section>
 
         <section class="answer-surface" data-answer-surface></section>
@@ -130,10 +138,15 @@ document.querySelector("#app").innerHTML = `
         <div class="trace-list" data-trace-list></div>
       </aside>
     </main>
+
+    <div class="context-menu" data-context-menu hidden>
+      <button type="button" data-delete-history>Delete</button>
+    </div>
   </div>
 `;
 
 let appState = loadState();
+let isHistoryOpen = false;
 
 const answerSurface = document.querySelector("[data-answer-surface]");
 const traceList = document.querySelector("[data-trace-list]");
@@ -146,6 +159,8 @@ const uploadStatus = document.querySelector("[data-upload-status]");
 const sendButton = document.querySelector(".send-button");
 const composerInput = document.querySelector(".composer-textarea");
 const sessionList = document.querySelector("[data-session-list]");
+const contextMenu = document.querySelector("[data-context-menu]");
+let pendingDelete = null;
 
 document.querySelector("[data-mode-toggle]").addEventListener("click", () => {
   modeMenu.hidden = !modeMenu.hidden;
@@ -160,6 +175,13 @@ document.querySelectorAll("[data-new-chat]").forEach((button) => {
     saveState();
     composerInput.textContent = "";
     renderApp();
+  });
+});
+
+document.querySelectorAll("[data-history-toggle]").forEach((button) => {
+  button.addEventListener("click", () => {
+    isHistoryOpen = !isHistoryOpen;
+    renderHistoryVisibility();
   });
 });
 
@@ -205,13 +227,48 @@ document.querySelectorAll("[data-mode]").forEach((button) => {
 });
 
 sessionList.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-session-id]");
+  const button = event.target.closest("[data-response-id]");
   if (!button) {
     return;
   }
   appState.activeSessionId = button.dataset.sessionId;
+  appState.activeResponseId = button.dataset.responseId;
+  const selectedSession = getActiveSession();
+  selectedSession.mode = button.dataset.mode || selectedSession.mode;
+  hideContextMenu();
   saveState();
   renderApp();
+});
+
+sessionList.addEventListener("contextmenu", (event) => {
+  const button = event.target.closest("[data-response-id]");
+  if (!button) {
+    return;
+  }
+  event.preventDefault();
+  pendingDelete = {
+    sessionId: button.dataset.sessionId,
+    responseId: button.dataset.responseId,
+    requestId: button.dataset.requestId
+  };
+  contextMenu.style.left = `${event.clientX}px`;
+  contextMenu.style.top = `${event.clientY}px`;
+  contextMenu.hidden = false;
+});
+
+document.querySelector("[data-delete-history]").addEventListener("click", () => {
+  if (!pendingDelete) {
+    return;
+  }
+  deleteHistoryEntry(pendingDelete);
+  pendingDelete = null;
+  hideContextMenu();
+});
+
+document.addEventListener("click", (event) => {
+  if (!contextMenu.hidden && !event.target.closest("[data-context-menu]")) {
+    hideContextMenu();
+  }
 });
 
 composerInput.addEventListener("input", () => {
@@ -232,13 +289,17 @@ async function submitQuery() {
 
   const session = getActiveSession();
   const mode = session.mode;
-  session.messages.push({ role: "user", content: query, mode, createdAt: Date.now() });
+  const requestId = createId("request");
+  session.messages.push({
+    id: createId("message"),
+    role: "user",
+    content: query,
+    mode,
+    requestId,
+    createdAt: Date.now()
+  });
   session.title = query.slice(0, 28);
-  session.latestQuestion = query;
-  session.answer = "";
-  session.sources = [];
   session.trace = [];
-  session.error = "";
   session.updatedAt = Date.now();
   saveState();
   renderLoading();
@@ -246,11 +307,20 @@ async function submitQuery() {
   try {
     const response = await queryOnCall(query, mode);
     const activeSession = getActiveSession();
-    activeSession.latestQuestion = query;
-    activeSession.answer = response.answer;
+    const responseId = createId("response");
+    activeSession.messages.push({
+      id: responseId,
+      role: "assistant",
+      mode,
+      answer: response.answer,
+      sources: response.sources ?? [],
+      trace: response.trace ?? [],
+      error: "",
+      requestId,
+      createdAt: Date.now()
+    });
+    appState.activeResponseId = responseId;
     activeSession.trace = response.trace ?? [];
-    activeSession.sources = response.sources ?? [];
-    activeSession.error = "";
     activeSession.updatedAt = Date.now();
     composerInput.textContent = "";
     composerInput.classList.remove("has-input", "is-empty");
@@ -258,17 +328,26 @@ async function submitQuery() {
     renderApp();
   } catch (error) {
     const activeSession = getActiveSession();
-    activeSession.latestQuestion = query;
-    activeSession.answer = "";
-    activeSession.sources = [];
-    activeSession.error = error instanceof Error ? error.message : "Request failed.";
-    activeSession.trace = [
+    const trace = [
       {
         step: 0,
         event: "frontend_error",
         detail: error instanceof Error ? error.message : "unknown request error"
       }
     ];
+    activeSession.messages.push({
+      id: createId("response"),
+      role: "assistant",
+      mode,
+      answer: "",
+      sources: [],
+      trace,
+      error: error instanceof Error ? error.message : "Request failed.",
+      requestId,
+      createdAt: Date.now()
+    });
+    appState.activeResponseId = activeSession.messages[activeSession.messages.length - 1].id;
+    activeSession.trace = trace;
     activeSession.updatedAt = Date.now();
     saveState();
     renderApp();
@@ -281,6 +360,7 @@ function loadState() {
   try {
     const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "null");
     if (stored?.sessions?.length && stored.activeSessionId) {
+      normalizeStoredState(stored);
       return stored;
     }
   } catch {
@@ -305,11 +385,7 @@ function createSession() {
     title: "New Chat",
     mode: "agent",
     messages: [],
-    latestQuestion: "",
-    answer: "",
-    sources: [],
     trace: [],
-    error: "",
     createdAt: now,
     updatedAt: now
   };
@@ -328,6 +404,10 @@ function getActiveSession() {
 
 function renderApp() {
   const session = getActiveSession();
+  const selectedAnswer = getSelectedAnswer();
+  if (selectedAnswer?.message.mode) {
+    session.mode = selectedAnswer.message.mode;
+  }
   const mode = modeAssets[session.mode];
 
   document.querySelector("[data-current-mode]").textContent = mode.label;
@@ -342,28 +422,45 @@ function renderApp() {
   });
 
   renderSessions();
-  renderMessages(session);
-  renderTrace(session.trace);
+  renderSelectedAnswer(selectedAnswer);
+  renderTrace(selectedAnswer?.message.trace ?? session.trace);
+  renderHistoryVisibility();
+}
+
+function renderHistoryVisibility() {
+  document.querySelector(".history-panel").classList.toggle("is-open", isHistoryOpen);
+  document.querySelector(".history-rail").classList.toggle("is-hidden", isHistoryOpen);
 }
 
 function renderSessions() {
-  sessionList.innerHTML = appState.sessions
+  const entries = getHistoryEntries();
+  if (!entries.length) {
+    sessionList.innerHTML = `<p class="history-empty">No answer history yet.</p>`;
+    return;
+  }
+
+  sessionList.innerHTML = entries
     .map(
-      (session) => `
+      (entry) => `
         <button
           type="button"
-          data-session-id="${session.id}"
-          class="${session.id === appState.activeSessionId ? "is-active" : ""}"
+          data-session-id="${entry.sessionId}"
+          data-response-id="${entry.responseId}"
+          data-request-id="${entry.requestId}"
+          data-mode="${entry.mode}"
+          class="${entry.responseId === appState.activeResponseId ? "is-active" : ""}"
         >
-          ${escapeHtml(session.title)}
+          <strong>${escapeHtml(entry.title)}</strong>
+          <span>${escapeHtml(entry.mode)} · ${escapeHtml(entry.summary)}</span>
         </button>
       `
     )
     .join("");
 }
 
-function renderMessages(session) {
-  if (!session.messages.length && !session.answer && !session.error) {
+function renderSelectedAnswer(selectedAnswer) {
+  const session = getActiveSession();
+  if (!selectedAnswer) {
     answerSurface.innerHTML = `
       <div class="empty-state">
         <p>${modeAssets[session.mode].label} mode selected.</p>
@@ -373,18 +470,7 @@ function renderMessages(session) {
     return;
   }
 
-  const userMessages = session.messages.map(renderMessage).join("");
-  const answerPanel = session.answer || session.error ? renderAnswerPanel(session) : "";
-  const historyPanel = userMessages ? `<section class="history-panel"><h2>History</h2>${userMessages}</section>` : "";
-  answerSurface.innerHTML = `${answerPanel}${historyPanel}`;
-}
-
-function renderMessage(message) {
-  if (message.role === "user") {
-    return `<article class="message message-user">${escapeHtml(message.content)}</article>`;
-  }
-
-  return "";
+  answerSurface.innerHTML = renderAnswerPanel(selectedAnswer.message);
 }
 
 function renderLoading() {
@@ -408,15 +494,11 @@ function renderAnswerPanel(session) {
   return `
     <article class="answer-panel">
       <span class="response-badge">${escapeHtml(session.mode)} response</span>
-      <div class="latest-question">
-        <span>Latest question</span>
-        <p>${escapeHtml(session.latestQuestion || session.title || "")}</p>
-      </div>
       <h2>Answer</h2>
       ${
         session.error
           ? `<p class="message-error">${escapeHtml(session.error)}</p>`
-          : `<p class="answer-text">${escapeHtml(session.answer)}</p>`
+          : `<p class="answer-text">${escapeHtml(session.answer || "")}</p>`
       }
       ${renderSources(session.sources ?? [])}
       ${renderDebugPanel(session)}
@@ -426,15 +508,21 @@ function renderAnswerPanel(session) {
 
 function renderSources(sources) {
   const rows = sources
-    .map(
-      (source) => `
+    .map((source) => {
+      return `
         <li>
-          <strong>${escapeHtml(source.id || source.filename || "source")}</strong>
-          <span>${escapeHtml(source.title || source.snippet || "No source detail")}</span>
-          ${source.score ? `<b>${escapeHtml(source.score)}</b>` : ""}
+          <div class="source-main">
+            <strong>${escapeHtml(source.id || source.filename || "source")}</strong>
+            <span>${escapeHtml(source.title || "No source title")}</span>
+            ${source.score ? `<b>score: ${escapeHtml(source.score)}</b>` : ""}
+          </div>
+          <details class="source-original">
+            <summary>Read source excerpt</summary>
+            <pre>${escapeHtml(source.snippet || "No source excerpt returned by backend.")}</pre>
+          </details>
         </li>
-      `
-    )
+      `;
+    })
     .join("");
 
   return `
@@ -450,6 +538,100 @@ function renderSources(sources) {
       }
     </div>
   `;
+}
+
+function getSelectedAnswer() {
+  const entries = getHistoryEntries();
+  if (!entries.length) {
+    appState.activeResponseId = "";
+    return null;
+  }
+
+  let entry = entries.find((item) => item.responseId === appState.activeResponseId);
+  if (!entry) {
+    entry = entries[0];
+    appState.activeSessionId = entry.sessionId;
+    appState.activeResponseId = entry.responseId;
+  }
+  return entry;
+}
+
+function getHistoryEntries() {
+  return appState.sessions
+    .flatMap((session) =>
+      session.messages
+        .filter((message) => message.role === "assistant")
+        .map((message) => {
+          const queryMessage = findRequestQuery(session.messages, message);
+          return {
+            sessionId: session.id,
+            responseId: message.id,
+            requestId: message.requestId || "",
+            mode: message.mode || session.mode,
+            title: queryMessage?.content || session.title || "Untitled",
+            summary: message.error || message.answer || "No answer text",
+            createdAt: message.createdAt || session.updatedAt,
+            message
+          };
+        })
+    )
+    .sort((left, right) => right.createdAt - left.createdAt);
+}
+
+function findRequestQuery(messages, response) {
+  if (response.requestId) {
+    const match = messages.find((message) => message.role === "user" && message.requestId === response.requestId);
+    if (match) {
+      return match;
+    }
+  }
+
+  const responseIndex = messages.findIndex((message) => message.id === response.id);
+  for (let index = responseIndex - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "user") {
+      return messages[index];
+    }
+  }
+  return null;
+}
+
+function deleteHistoryEntry(entry) {
+  const session = appState.sessions.find((item) => item.id === entry.sessionId);
+  if (!session) {
+    return;
+  }
+
+  if (entry.requestId) {
+    session.messages = session.messages.filter((message) => message.requestId !== entry.requestId);
+  } else {
+    session.messages = session.messages.filter((message) => message.id !== entry.responseId);
+  }
+
+  if (appState.activeResponseId === entry.responseId) {
+    appState.activeResponseId = "";
+  }
+  session.updatedAt = Date.now();
+  saveState();
+  renderApp();
+}
+
+function normalizeStoredState(state) {
+  state.activeResponseId = state.activeResponseId || "";
+  state.sessions.forEach((session) => {
+    session.messages = Array.isArray(session.messages) ? session.messages : [];
+    session.messages.forEach((message) => {
+      message.id = message.id || createId(message.role === "assistant" ? "response" : "message");
+      message.requestId = message.requestId || createId("request");
+    });
+  });
+}
+
+function hideContextMenu() {
+  contextMenu.hidden = true;
+}
+
+function createId(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function renderDebugPanel(session) {
