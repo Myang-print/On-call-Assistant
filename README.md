@@ -121,3 +121,38 @@ API 设计不做限定，自行定义。
 | "P0 故障的响应流程是什么？"       | Agent 综合多个 SOP 给出完整回答                            |
 | "怀疑有人入侵了系统"             | Agent 找到 sop-005.html，给出安全事件响应流程              |
 | "推荐结果质量下降了"             | Agent 找到 sop-008.html，给出排查方向                      |
+
+---
+
+## Local Development
+
+Backend:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend is maintained under `frontend/` and calls the backend with:
+
+```text
+POST /api/oncall/query
+{ "query": "服务 OOM 了怎么办？" }
+```
+
+Expected response shape:
+
+```json
+{
+  "query": "服务 OOM 了怎么办？",
+  "answer": "OnCallAgent completed with runtime status: finished.",
+  "trace": []
+}
+```

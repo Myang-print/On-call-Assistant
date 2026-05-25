@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Request, status
 
+from app.api import router as api_router
 from app.documents import DocumentStore
 from app.hybrid_search import hybrid_search_documents
 from app.key_search import search_documents
@@ -9,6 +10,7 @@ from app.settings import DATA_DIR
 
 
 app = FastAPI(title="On-Call Assistant")
+app.include_router(api_router)
 # Process-local document snapshot keeps v1 request handling deterministic.
 document_store = DocumentStore.from_data_dir()
 domain_dictionary = load_domain_dictionary(DATA_DIR / "domain_dictionary.json")
