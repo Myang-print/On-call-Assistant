@@ -219,6 +219,8 @@ document.querySelectorAll("[data-mode]").forEach((button) => {
   button.addEventListener("click", () => {
     const session = getActiveSession();
     session.mode = button.dataset.mode;
+    appState.activeResponseId = "";
+    session.trace = [];
     session.updatedAt = Date.now();
     modeMenu.hidden = true;
     saveState();
@@ -405,7 +407,7 @@ function getActiveSession() {
 function renderApp() {
   const session = getActiveSession();
   const selectedAnswer = getSelectedAnswer();
-  if (selectedAnswer?.message.mode) {
+  if (appState.activeResponseId && selectedAnswer?.message.mode) {
     session.mode = selectedAnswer.message.mode;
   }
   const mode = modeAssets[session.mode];
@@ -541,6 +543,10 @@ function renderSources(sources) {
 }
 
 function getSelectedAnswer() {
+  if (!appState.activeResponseId) {
+    return null;
+  }
+
   const entries = getHistoryEntries();
   if (!entries.length) {
     appState.activeResponseId = "";
@@ -549,9 +555,8 @@ function getSelectedAnswer() {
 
   let entry = entries.find((item) => item.responseId === appState.activeResponseId);
   if (!entry) {
-    entry = entries[0];
-    appState.activeSessionId = entry.sessionId;
-    appState.activeResponseId = entry.responseId;
+    appState.activeResponseId = "";
+    return null;
   }
   return entry;
 }
