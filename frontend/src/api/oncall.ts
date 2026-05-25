@@ -11,12 +11,15 @@ export type OnCallSource = {
 };
 
 export type OnCallQueryResponse = {
+  query: string;
   answer: string;
   sources: OnCallSource[];
   trace: OnCallTraceItem[];
+  raw: BackendResponse;
 };
 
 type BackendResponse = {
+  query?: unknown;
   answer?: unknown;
   sources?: unknown;
   results?: unknown;
@@ -25,24 +28,86 @@ type BackendResponse = {
 };
 
 export async function queryOnCall(query: string, mode: OnCallMode): Promise<OnCallQueryResponse> {
-  const response = await fetch("/api/oncall/query", {
+  if (mode === "exact") {
+    return querySearchEndpoint(`/v1/search?q=${encodeURIComponent(query)}`, query, mode);
+  }
+  if (mode === "semantic") {
+    return querySearchEndpoint(`/v2/search?q=${encodeURIComponent(query)}`, query, mode);
+  }
+  return queryAgentEndpoint(query, mode);
+}
+
+async function queryAgentEndpoint(query: string, mode: OnCallMode): Promise<OnCallQueryResponse> {
+  const payload = await postJson("/api/oncall/query", { query, mode });
+
+  return normalizeResponsePayload(payload, query);
+}
+
+async function querySearchEndpoint(url: string, query: string, mode: OnCallMode): Promise<OnCallQueryResponse> {
+  const payload = await getJson(url);
+  const sources = normalizeSources(payload.results);
+
+  return {
+    query: typeof payload.query === "string" ? payload.query : query,
+    answer: toSearchAnswer(mode, query, sources),
+    sources,
+    trace: [
+      {
+        step: 0,
+        event: mode === "exact" ? "v1_search" : "v2_search",
+        detail: `${sources.length} result(s) returned`
+      }
+    ],
+    raw: payload
+  };
+}
+
+function normalizeResponsePayload(payload: BackendResponse, query: string): OnCallQueryResponse {
+  return {
+    query: typeof payload.query === "string" ? payload.query : query,
+    answer: typeof payload.answer === "string" ? payload.answer : "",
+    sources: normalizeSources(payload.sources ?? payload.results),
+    trace: Array.isArray(payload.trace) ? (payload.trace as OnCallTraceItem[]) : [],
+    raw: payload
+  };
+}
+
+async function getJson(url: string): Promise<BackendResponse> {
+  const response = await fetch(url);
+  const payload = (await response.json().catch(() => ({}))) as BackendResponse;
+  if (!response.ok) {
+    throw new Error(toErrorMessage(payload.detail, response.status));
+  }
+  return payload;
+}
+
+async function postJson(url: string, body: Record<string, unknown>): Promise<BackendResponse> {
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ query, mode })
+    body: JSON.stringify(body)
   });
 
   const payload = (await response.json().catch(() => ({}))) as BackendResponse;
   if (!response.ok) {
     throw new Error(toErrorMessage(payload.detail, response.status));
   }
+  return payload;
+}
 
-  return {
-    answer: typeof payload.answer === "string" ? payload.answer : "",
-    sources: normalizeSources(payload.sources ?? payload.results),
-    trace: Array.isArray(payload.trace) ? (payload.trace as OnCallTraceItem[]) : []
-  };
+function toSearchAnswer(mode: OnCallMode, query: string, sources: OnCallSource[]): string {
+  const label = mode === "exact" ? "v1 exact search" : "v2 semantic search";
+  if (!sources.length) {
+    return `${label} did not find matching SOP documents for "${query}".`;
+  }
+
+  const top = sources
+    .slice(0, 3)
+    .map((source) => source.id || source.title || source.filename || "source")
+    .join(", ");
+  return `${label} found ${sources.length} relevant SOP document(s) for "${query}". Start with ${top}. Review the source list below for titles, snippets, and scores.`;
 }
 
 function normalizeSources(value: unknown): OnCallSource[] {

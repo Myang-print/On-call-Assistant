@@ -1,7 +1,7 @@
 import "./styles.css";
 import { queryOnCall } from "./api/oncall.ts";
 
-const STORAGE_KEY = "oncall-agent-ui-sessions-v2";
+const STORAGE_KEY = "ONCALL_SESSION_V3";
 
 const modeAssets = {
   exact: {
@@ -234,6 +234,11 @@ async function submitQuery() {
   const mode = session.mode;
   session.messages.push({ role: "user", content: query, mode, createdAt: Date.now() });
   session.title = query.slice(0, 28);
+  session.latestQuestion = query;
+  session.answer = "";
+  session.sources = [];
+  session.trace = [];
+  session.error = "";
   session.updatedAt = Date.now();
   saveState();
   renderLoading();
@@ -241,8 +246,11 @@ async function submitQuery() {
   try {
     const response = await queryOnCall(query, mode);
     const activeSession = getActiveSession();
-    activeSession.messages.push(createApiResponse(response, mode));
-    activeSession.trace = response.trace;
+    activeSession.latestQuestion = query;
+    activeSession.answer = response.answer;
+    activeSession.trace = response.trace ?? [];
+    activeSession.sources = response.sources ?? [];
+    activeSession.error = "";
     activeSession.updatedAt = Date.now();
     composerInput.textContent = "";
     composerInput.classList.remove("has-input", "is-empty");
@@ -250,7 +258,10 @@ async function submitQuery() {
     renderApp();
   } catch (error) {
     const activeSession = getActiveSession();
-    activeSession.messages.push(createErrorResponse(error, mode));
+    activeSession.latestQuestion = query;
+    activeSession.answer = "";
+    activeSession.sources = [];
+    activeSession.error = error instanceof Error ? error.message : "Request failed.";
     activeSession.trace = [
       {
         step: 0,
@@ -294,7 +305,11 @@ function createSession() {
     title: "New Chat",
     mode: "agent",
     messages: [],
+    latestQuestion: "",
+    answer: "",
+    sources: [],
     trace: [],
+    error: "",
     createdAt: now,
     updatedAt: now
   };
@@ -348,7 +363,7 @@ function renderSessions() {
 }
 
 function renderMessages(session) {
-  if (!session.messages.length) {
+  if (!session.messages.length && !session.answer && !session.error) {
     answerSurface.innerHTML = `
       <div class="empty-state">
         <p>${modeAssets[session.mode].label} mode selected.</p>
@@ -358,7 +373,10 @@ function renderMessages(session) {
     return;
   }
 
-  answerSurface.innerHTML = session.messages.map(renderMessage).join("");
+  const userMessages = session.messages.map(renderMessage).join("");
+  const answerPanel = session.answer || session.error ? renderAnswerPanel(session) : "";
+  const historyPanel = userMessages ? `<section class="history-panel"><h2>History</h2>${userMessages}</section>` : "";
+  answerSurface.innerHTML = `${answerPanel}${historyPanel}`;
 }
 
 function renderMessage(message) {
@@ -366,21 +384,7 @@ function renderMessage(message) {
     return `<article class="message message-user">${escapeHtml(message.content)}</article>`;
   }
 
-  if (message.results) {
-    return `
-      <article class="message message-assistant">
-        <p>${escapeHtml(message.content)}</p>
-        ${renderSearchResults(message.results)}
-      </article>
-    `;
-  }
-
-  return `
-    <article class="message message-assistant">
-      <p class="${message.error ? "message-error" : ""}">${escapeHtml(message.content)}</p>
-      ${renderSources(message.sources || [])}
-    </article>
-  `;
+  return "";
 }
 
 function renderLoading() {
@@ -400,48 +404,23 @@ function renderLoading() {
   );
 }
 
-function createApiResponse(response, mode) {
-  return {
-    role: "assistant",
-    content: response.answer || "Backend returned an empty answer.",
-    sources: response.sources || [],
-    mode,
-    createdAt: Date.now()
-  };
-}
-
-function createErrorResponse(error, mode) {
-  return {
-    role: "assistant",
-    content: error instanceof Error ? error.message : "Request failed.",
-    sources: [],
-    error: true,
-    mode,
-    createdAt: Date.now()
-  };
-}
-
-function renderSearchResults(results) {
-  const rows = results
-    .map(
-      (result) => `
-        <li>
-          <div>
-            <strong>${escapeHtml(result.id)}</strong>
-            <span>${escapeHtml(result.title)}</span>
-          </div>
-          <b>${escapeHtml(result.score)}</b>
-        </li>
-      `
-    )
-    .join("");
-
+function renderAnswerPanel(session) {
   return `
-    <div class="result-header">
-      <p>Search results</p>
-      <span>${results.length} matches</span>
-    </div>
-    <ul class="result-list">${rows}</ul>
+    <article class="answer-panel">
+      <span class="response-badge">${escapeHtml(session.mode)} response</span>
+      <div class="latest-question">
+        <span>Latest question</span>
+        <p>${escapeHtml(session.latestQuestion || session.title || "")}</p>
+      </div>
+      <h2>Answer</h2>
+      ${
+        session.error
+          ? `<p class="message-error">${escapeHtml(session.error)}</p>`
+          : `<p class="answer-text">${escapeHtml(session.answer)}</p>`
+      }
+      ${renderSources(session.sources ?? [])}
+      ${renderDebugPanel(session)}
+    </article>
   `;
 }
 
@@ -467,8 +446,18 @@ function renderSources(sources) {
       ${
         sources.length
           ? `<ul class="source-list">${rows}</ul>`
-          : `<p class="source-empty">No sources returned by backend.</p>`
+          : `<p class="source-empty">Backend returned no source list.</p>`
       }
+    </div>
+  `;
+}
+
+function renderDebugPanel(session) {
+  return `
+    <div class="debug-panel">
+      <span>answer length: ${String(session.answer || "").length}</span>
+      <span>trace count: ${(session.trace ?? []).length}</span>
+      <span>sources count: ${(session.sources ?? []).length}</span>
     </div>
   `;
 }
