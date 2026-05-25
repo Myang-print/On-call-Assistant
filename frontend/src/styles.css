@@ -85,6 +85,16 @@ button {
   color: #888;
 }
 
+.workspace-name > span {
+  color: #efefef;
+}
+
+.workspace-name a {
+  display: inline-flex;
+  color: #888;
+  text-decoration: none;
+}
+
 .soft-chevron {
   display: inline-block;
   width: 9px;
@@ -436,6 +446,22 @@ h1 {
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.question-box {
+  margin: 4px 0 18px;
+  padding: 13px 15px;
+  border: 1px solid #303033;
+  border-radius: 8px;
+  background: #1d1d1f;
+}
+
+.question-box span {
+  display: block;
+  color: #f1f1f1;
+  font-size: 17px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .message-error {
@@ -830,9 +856,37 @@ h1 {
   color: #eeeeee;
 }
 
-.upload-title span {
-  color: #cfcfcf;
-  font-size: 23px;
+.upload-paperclip {
+  position: relative;
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+}
+
+.upload-paperclip::before {
+  position: absolute;
+  top: 2px;
+  left: 7px;
+  width: 8px;
+  height: 17px;
+  border: 3px solid #d8d8d8;
+  border-bottom-color: transparent;
+  border-radius: 999px 999px 0 0;
+  content: "";
+  transform: rotate(16deg);
+}
+
+.upload-paperclip::after {
+  position: absolute;
+  top: 7px;
+  left: 11px;
+  width: 4px;
+  height: 11px;
+  border: 2px solid #d8d8d8;
+  border-bottom-color: transparent;
+  border-radius: 999px 999px 0 0;
+  content: "";
+  transform: rotate(16deg);
 }
 
 .upload-title strong {
@@ -896,10 +950,12 @@ h1 {
 .trace-panel {
   grid-column: 2;
   align-self: stretch;
+  min-width: 0;
   min-height: calc(100vh - 118px);
   padding: 18px;
   border-left: 1px solid #262626;
   background: rgba(13, 13, 14, 0.72);
+  overflow: hidden;
 }
 
 .trace-header {
@@ -935,17 +991,22 @@ h1 {
 .trace-list {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .trace-item {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid #282828;
   border-radius: 8px;
   background: #151516;
+  overflow: hidden;
 }
 
 .trace-item summary {
   display: grid;
-  grid-template-columns: 28px 1fr;
+  grid-template-columns: 28px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
   min-height: 52px;
@@ -969,8 +1030,12 @@ h1 {
 }
 
 .trace-item summary strong {
+  min-width: 0;
+  overflow: hidden;
   color: #d7d7d7;
   font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .trace-item p {
@@ -978,6 +1043,8 @@ h1 {
   padding: 0 14px 14px 50px;
   color: #969696;
   font-size: 14px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .context-menu {

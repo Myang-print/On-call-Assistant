@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.agent import run_agent_once
@@ -25,13 +25,13 @@ class OnCallQueryResponse(BaseModel):
 
 
 @router.post("/api/oncall/query", response_model=OnCallQueryResponse)
-def query_oncall_agent(payload: OnCallQueryRequest) -> dict[str, Any]:
+def query_oncall_agent(payload: OnCallQueryRequest, request: Request) -> dict[str, Any]:
     query = payload.query.strip()
     if not query:
         raise HTTPException(status_code=400, detail="query is required")
 
     try:
-        result = run_agent_once(query)
+        result = run_agent_once(query, documents=_active_documents(request))
     except Exception as error:
         return _rollback_to_v2_response(query, error)
 
@@ -92,3 +92,10 @@ def _collect_trace(result: dict[str, Any], runtime: Any) -> list[dict[str, Any]]
             trace.extend(item for item in runtime_trace if isinstance(item, dict))
 
     return trace
+
+
+def _active_documents(request: Request) -> list[Any] | None:
+    store = getattr(request.app.state, "document_store", None)
+    if store is None or not hasattr(store, "all"):
+        return None
+    return store.all()

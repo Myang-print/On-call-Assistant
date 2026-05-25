@@ -1,5 +1,5 @@
 import "./styles.css";
-import { queryOnCall } from "./api/oncall.ts";
+import { queryOnCall, uploadHtmlDocument } from "./api/oncall.ts";
 
 const STORAGE_KEY = "ONCALL_SESSION_V4";
 
@@ -8,19 +8,19 @@ const modeAssets = {
     label: "exact",
     title: "exact search workspace",
     description: "Backend-connected keyword mode request.",
-    image: new URL("../Figure/Andante.png", import.meta.url).href
+    image: "/Figure/Andante.png"
   },
   semantic: {
     label: "semantic",
     title: "semantic search workspace",
     description: "Backend-connected semantic mode request.",
-    image: new URL("../Figure/Moderato.png", import.meta.url).href
+    image: "/Figure/Moderato.png"
   },
   agent: {
     label: "agent",
     title: "agent response workspace",
     description: "Backend-connected agent answer with trace playback.",
-    image: new URL("../Figure/Allegretto.png", import.meta.url).href
+    image: "/Figure/Allegretto.png"
   }
 };
 
@@ -28,7 +28,17 @@ document.querySelector("#app").innerHTML = `
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-left">
-        <button class="workspace-name" type="button">OnCallAgent <span class="soft-chevron"></span></button>
+        <div class="workspace-name">
+          <span>OnCallAgent</span>
+          <a
+            href="https://www.moonshot.ai/"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Open Moonshot AI"
+          >
+            <span class="soft-chevron"></span>
+          </a>
+        </div>
       </div>
       <a
         class="icon-button icon-share"
@@ -77,7 +87,7 @@ document.querySelector("#app").innerHTML = `
               <button class="add-button" type="button" data-add-toggle aria-label="Add document">＋</button>
               <div class="upload-popover" data-add-menu hidden>
                 <div class="upload-title">
-                  <span>⌘</span>
+                  <span class="upload-paperclip" aria-hidden="true"></span>
                   <strong>Upload File</strong>
                 </div>
                 <button class="upload-dropzone" type="button" data-upload-dropzone>
@@ -85,9 +95,9 @@ document.querySelector("#app").innerHTML = `
                   <span>Drag & drop file here</span>
                   <small>or click to browse</small>
                 </button>
-                <p data-upload-status>Supports .html, .txt, .md, .log, .json</p>
+                <p data-upload-status>Supports .html</p>
               </div>
-              <input class="file-input" data-file-input type="file" accept=".html,.txt,.md,.log,.json,text/html,text/plain,application/json" aria-label="Upload file" />
+              <input class="file-input" data-file-input type="file" accept=".html,text/html" aria-label="Upload file" />
             </div>
             <div class="composer-right">
               <div class="mode-selector">
@@ -196,7 +206,7 @@ uploadDropzone.addEventListener("click", () => {
 
 fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
-  uploadStatus.textContent = file ? `Selected: ${file.name}` : "Supports .html, .txt, .md, .log, .json";
+  void handleUploadFile(file);
 });
 
 uploadDropzone.addEventListener("dragover", (event) => {
@@ -212,8 +222,25 @@ uploadDropzone.addEventListener("drop", (event) => {
   event.preventDefault();
   uploadDropzone.classList.remove("is-dragging");
   const file = event.dataTransfer.files?.[0];
-  uploadStatus.textContent = file ? `Selected: ${file.name}` : "Supports .html, .txt, .md, .log, .json";
+  void handleUploadFile(file);
 });
+
+async function handleUploadFile(file) {
+  if (!file) {
+    uploadStatus.textContent = "Supports .html";
+    return;
+  }
+
+  uploadStatus.textContent = `Uploading: ${file.name}`;
+  try {
+    const document = await uploadHtmlDocument(file);
+    uploadStatus.textContent = `Added: ${document.id}`;
+  } catch (error) {
+    uploadStatus.textContent = error instanceof Error ? error.message : "Upload failed.";
+  } finally {
+    fileInput.value = "";
+  }
+}
 
 document.querySelectorAll("[data-mode]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -472,7 +499,7 @@ function renderSelectedAnswer(selectedAnswer) {
     return;
   }
 
-  answerSurface.innerHTML = renderAnswerPanel(selectedAnswer.message);
+  answerSurface.innerHTML = renderAnswerPanel(selectedAnswer.message, selectedAnswer.title);
 }
 
 function renderLoading() {
@@ -492,10 +519,13 @@ function renderLoading() {
   );
 }
 
-function renderAnswerPanel(session) {
+function renderAnswerPanel(session, question = "") {
   return `
     <article class="answer-panel">
       <span class="response-badge">${escapeHtml(session.mode)} response</span>
+      <div class="question-box">
+        <span>${escapeHtml(question || "Untitled question")}</span>
+      </div>
       <h2>Answer</h2>
       ${
         session.error

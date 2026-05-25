@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Request, status
+import re
 
 from app.api import router as api_router
 from app.documents import DocumentStore
@@ -13,7 +14,9 @@ app = FastAPI(title="On-Call Assistant")
 app.include_router(api_router)
 # Process-local document snapshot keeps v1 request handling deterministic.
 document_store = DocumentStore.from_data_dir()
+app.state.document_store = document_store
 domain_dictionary = load_domain_dictionary(DATA_DIR / "domain_dictionary.json")
+DOCUMENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class DocumentCreateRequest(BaseModel):
@@ -32,6 +35,10 @@ def create_v1_document(payload: DocumentCreateRequest) -> dict[str, str]:
     raw_html = payload.html.strip()
     if not doc_id or not raw_html:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="id and html are required")
+    if not DOCUMENT_ID_PATTERN.fullmatch(doc_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid document id")
+    if "<html" not in raw_html.casefold() or "</html>" not in raw_html.casefold():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid html document")
 
     try:
         document = document_store.add_html_document(doc_id, raw_html)

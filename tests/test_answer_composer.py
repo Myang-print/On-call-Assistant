@@ -141,7 +141,7 @@ def test_agent_calls_answer_composer_after_runtime_finish() -> None:
 
 
 def test_oncall_api_uses_agent_composed_answer(monkeypatch) -> None:
-    def fake_run_agent_once(query: str):
+    def fake_run_agent_once(query: str, **_: object):
         return {
             "ok": True,
             "answer": "问题判断：根据 SOP 先检查内存限制。",

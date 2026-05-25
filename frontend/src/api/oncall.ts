@@ -18,6 +18,11 @@ export type OnCallQueryResponse = {
   raw: BackendResponse;
 };
 
+export type DocumentUploadResponse = {
+  id: string;
+  title: string;
+};
+
 type BackendResponse = {
   query?: unknown;
   answer?: unknown;
@@ -36,6 +41,29 @@ export async function queryOnCall(query: string, mode: OnCallMode): Promise<OnCa
   }
   return queryAgentEndpoint(query, mode);
 }
+
+export async function uploadHtmlDocument(file: File): Promise<DocumentUploadResponse> {
+  if (!file.name.toLowerCase().endsWith(".html")) {
+    throw new Error("Only .html files are supported.");
+  }
+
+  const id = file.name.replace(/\.html$/i, "").trim();
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+    throw new Error("HTML filename must use letters, numbers, hyphen, or underscore only.");
+  }
+
+  const html = (await file.text()).trim();
+  if (!html || !html.toLowerCase().includes("<html") || !html.toLowerCase().includes("</html>")) {
+    throw new Error("Selected file is not a valid HTML document.");
+  }
+
+  const payload = await postJson("/v1/documents", { id, html });
+  return {
+    id: String(payload.id || id),
+    title: String(payload.title || id)
+  };
+}
+
 
 async function queryAgentEndpoint(query: string, mode: OnCallMode): Promise<OnCallQueryResponse> {
   const payload = await postJson("/api/oncall/query", { query, mode });

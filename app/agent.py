@@ -1,4 +1,5 @@
 from collections.abc import Callable
+import re
 from typing import Any, Protocol
 
 from app.agent_runtime import run_deterministic_agent
@@ -32,6 +33,7 @@ def run_agent_once(
     planner: Planner | None = None,
     max_step: int = 3,
     answer_composer: Composer | None = None,
+    documents: list[Any] | None = None,
 ) -> dict[str, Any]:
     # Agent trace records only agent-level decisions; planner/runtime traces stay in their modules.
     planner_result = _call_planner(user_prompt, planner)
@@ -54,7 +56,7 @@ def run_agent_once(
         }
 
     runtime_result = run_deterministic_agent(max_step=max_step)
-    retrieved_docs, sources = _retrieve_evidence_for_query(user_prompt, runtime_result)
+    retrieved_docs, sources = _retrieve_evidence_for_query(user_prompt, runtime_result, documents)
     composed_answer = (answer_composer or AnswerComposer()).compose(
         user_query=user_prompt,
         retrieved_docs=retrieved_docs,
@@ -101,16 +103,16 @@ def _extract_runtime_trace(runtime_result: dict[str, Any]) -> list[dict[str, Any
 def _retrieve_evidence_for_query(
     user_prompt: str,
     runtime_result: dict[str, Any],
+    documents: list[Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     runtime_docs = _extract_retrieved_docs(runtime_result)
     runtime_sources = _extract_sources(runtime_result)
     if runtime_docs:
         return runtime_docs, runtime_sources
 
-    store = DocumentStore.from_data_dir()
-    documents = store.all()
-    sources = _rank_agent_sources(documents, user_prompt)
-    documents_by_id = {document.doc_id: document for document in documents}
+    active_documents = documents if documents is not None else DocumentStore.from_data_dir().all()
+    sources = _rank_agent_sources(active_documents, user_prompt)
+    documents_by_id = {document.doc_id: document for document in active_documents}
     retrieved_docs: list[dict[str, Any]] = []
     for source in sources:
         document = documents_by_id.get(str(source.get("id", "")))
@@ -149,6 +151,7 @@ def _keyword_evidence_search(documents: list[Any], user_prompt: str) -> list[dic
 def _agent_query_terms(user_prompt: str) -> list[str]:
     folded = user_prompt.casefold()
     terms = [user_prompt.strip()]
+    terms.extend(re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]*", user_prompt))
     if "oom" in folded or "内存" in user_prompt:
         terms.append("OOM")
     if "主从" in user_prompt or "延迟" in user_prompt:
