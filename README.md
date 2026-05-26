@@ -70,6 +70,31 @@ project/
 
 ---
 
+## 提交材料结构
+
+本仓库按照题目一 On-Call Assistant 的提交要求组织，最终打包时提交整个 Git 仓库，并保留 `.git/` 目录。
+
+```text
+.
+├── .git/                                                # 完整 Git 提交历史
+├── app/                                                 # FastAPI 后端、检索、Agent、Tool Runtime
+├── data/                                                # SOP HTML 文档与 v3 manifest 元数据
+├── docs/                                                # verification matrix、工程约束与开发记录
+├── eval/                                                # Golden Dataset 与检索评估相关逻辑
+├── frontend/                                            # v1/v2/v3 前端控制台
+├── prompt/                                              # AI 交互过程中的 prompt 截图
+├── screenshot/                                          # 最终运行效果截图
+├── tests/                                               # 单元测试、集成测试、回归测试
+├── Question_1.md                                        # 题目一需求记录
+├── README.md                                            # 项目说明、启动、测试与设计说明
+├── requirements.txt                                     # 后端基础依赖
+├── requirements_optional.txt                            # 可选能力依赖
+└── 杨皓然_北京航空航天大学_29届_GrowthLabIntern.pdf       # 个人简历
+```
+
+
+---
+
 ## 快速启动
 
 安装依赖：
