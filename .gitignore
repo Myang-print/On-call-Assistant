@@ -24,3 +24,16 @@ frontend/dist/
 *.swo
 
 tests/.tmp*/
+
+# personal notes
+修改方向.md
+笔试反馈.md
+
+# resume / personal files
+杨皓然_北京航空航天大学_29届_GrowthLabIntern.pdf
+
+# prompt experiments
+prompt/
+
+# screenshots
+screenshot/

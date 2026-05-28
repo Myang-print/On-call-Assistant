@@ -55,7 +55,7 @@ def run_agent_once(
             "trace": [{"stage": "agent", "event": "unavailable_tool", "tool": str(tool_name)}],
         }
 
-    runtime_result = run_deterministic_agent(max_step=max_step)
+    runtime_result = run_deterministic_agent(max_step=max_step, query=user_prompt)
     retrieved_docs, sources = _retrieve_evidence_for_query(user_prompt, runtime_result, documents)
     composed_answer = (answer_composer or AnswerComposer()).compose(
         user_query=user_prompt,
