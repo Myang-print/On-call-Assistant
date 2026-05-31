@@ -128,8 +128,8 @@ button {
 
 .soft-arrow {
   display: inline-block;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   position: relative;
 }
 
@@ -142,47 +142,49 @@ button {
 }
 
 .soft-arrow-up::before {
-  left: 9px;
-  top: 4px;
-  width: 4px;
+  left: 50%;
+  top: 5px;
+  width: 3px;
   height: 15px;
   border-radius: 999px;
+  transform: translateX(-50%);
 }
 
 .soft-arrow-up::after {
-  left: 5px;
+  left: 50%;
   top: 3px;
-  width: 12px;
-  height: 12px;
-  border-top: 4px solid currentColor;
-  border-left: 4px solid currentColor;
-  border-radius: 4px 0 0;
+  width: 11px;
+  height: 11px;
+  border-top: 3px solid currentColor;
+  border-left: 3px solid currentColor;
+  border-radius: 3px 0 0;
   background: transparent;
-  transform: rotate(45deg);
+  transform: translateX(-50%) rotate(45deg);
 }
 
 .soft-arrow-share {
-  transform: rotate(38deg);
+  transform: rotate(45deg);
 }
 
 .soft-arrow-share::before {
-  left: 8px;
-  top: 3px;
-  width: 4px;
-  height: 17px;
+  left: 50%;
+  top: 4px;
+  width: 3px;
+  height: 16px;
   border-radius: 999px;
+  transform: translateX(-50%);
 }
 
 .soft-arrow-share::after {
-  left: 4px;
+  left: 50%;
   top: 2px;
-  width: 12px;
-  height: 12px;
-  border-top: 4px solid currentColor;
-  border-left: 4px solid currentColor;
-  border-radius: 4px 0 0;
+  width: 11px;
+  height: 11px;
+  border-top: 3px solid currentColor;
+  border-left: 3px solid currentColor;
+  border-radius: 3px 0 0;
   background: transparent;
-  transform: rotate(45deg);
+  transform: translateX(-50%) rotate(45deg);
 }
 
 .workspace {
@@ -757,6 +759,7 @@ h1 {
 .send-button {
   display: grid;
   place-items: center;
+  position: relative;
   width: 44px;
   height: 44px;
   border: 1px solid #3f3f40;
@@ -764,6 +767,32 @@ h1 {
   background: #242425;
   color: #d9d9d9;
   font-size: 26px;
+}
+
+.add-button {
+  color: transparent;
+}
+
+.add-button::before,
+.add-button::after {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  border-radius: 999px;
+  background: #d9d9d9;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.add-button::before {
+  width: 17px;
+  height: 2px;
+}
+
+.add-button::after {
+  width: 2px;
+  height: 17px;
 }
 
 .send-button {

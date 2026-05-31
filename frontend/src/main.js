@@ -169,6 +169,7 @@ const uploadDropzone = document.querySelector("[data-upload-dropzone]");
 const uploadStatus = document.querySelector("[data-upload-status]");
 const sendButton = document.querySelector(".send-button");
 const composerInput = document.querySelector(".composer-textarea");
+const conversation = document.querySelector(".conversation");
 const sessionList = document.querySelector("[data-session-list]");
 const contextMenu = document.querySelector("[data-context-menu]");
 let pendingDelete = null;
@@ -194,6 +195,14 @@ document.querySelectorAll("[data-history-toggle]").forEach((button) => {
     isHistoryOpen = !isHistoryOpen;
     renderHistoryVisibility();
   });
+});
+
+conversation.addEventListener("click", () => {
+  if (!isHistoryOpen) {
+    return;
+  }
+  isHistoryOpen = false;
+  renderHistoryVisibility();
 });
 
 document.querySelector("[data-add-toggle]").addEventListener("click", () => {
