@@ -310,9 +310,11 @@ document.querySelector("[data-composer]").addEventListener("submit", (event) => 
 });
 
 async function submitQuery() {
+  console.log("[submit] start");
   const query = composerInput.innerText.trim();
   if (!query || sendButton.classList.contains("is-loading")) {
     composerInput.classList.toggle("is-empty", !query);
+    console.log("[submit] ignored", { hasQuery: Boolean(query), isLoading: sendButton.classList.contains("is-loading") });
     return;
   }
 
@@ -334,7 +336,9 @@ async function submitQuery() {
   renderLoading();
 
   try {
+    console.log("[submit] before queryOnCall", { query, mode });
     const response = await queryOnCall(query, mode);
+    console.log("[submit] after queryOnCall", response);
     const activeSession = getActiveSession();
     const responseId = createId("response");
     activeSession.messages.push({
@@ -343,19 +347,27 @@ async function submitQuery() {
       mode,
       answer: response.answer,
       sources: response.sources ?? [],
-      trace: response.trace ?? [],
+      trace: [
+        ...(response.trace ?? []),
+        {
+          stage: "frontend",
+          event: "frontend_answer_received",
+          frontend_answer_chars: String(response.answer || "").length
+        }
+      ],
       error: "",
       requestId,
       createdAt: Date.now()
     });
     appState.activeResponseId = responseId;
-    activeSession.trace = response.trace ?? [];
+    activeSession.trace = activeSession.messages[activeSession.messages.length - 1].trace;
     activeSession.updatedAt = Date.now();
     composerInput.textContent = "";
     composerInput.classList.remove("has-input", "is-empty");
     saveState();
     renderApp();
   } catch (error) {
+    console.log("[submit] error", error);
     const activeSession = getActiveSession();
     const trace = [
       {
@@ -380,6 +392,9 @@ async function submitQuery() {
     activeSession.updatedAt = Date.now();
     saveState();
     renderApp();
+  } finally {
+    console.log("[submit] finally");
+    clearLoadingState();
   }
 }
 
@@ -505,6 +520,7 @@ function renderSelectedAnswer(selectedAnswer) {
 function renderLoading() {
   sendButton.classList.add("is-loading");
   sendButton.setAttribute("aria-busy", "true");
+  answerSurface.querySelectorAll("[data-loading-message]").forEach((node) => node.remove());
   answerSurface.insertAdjacentHTML(
     "beforeend",
     `
@@ -517,6 +533,12 @@ function renderLoading() {
       </article>
     `
   );
+}
+
+function clearLoadingState() {
+  sendButton.classList.remove("is-loading");
+  sendButton.removeAttribute("aria-busy");
+  answerSurface.querySelectorAll("[data-loading-message]").forEach((node) => node.remove());
 }
 
 function renderAnswerPanel(session, question = "") {
@@ -689,7 +711,7 @@ function renderTrace(traceItems) {
             <span>${escapeHtml(item.step ?? "-")}</span>
             <strong>${escapeHtml(item.event || item.stage || "trace")}</strong>
           </summary>
-          <p>${escapeHtml(item.detail || item.error || JSON.stringify(item))}</p>
+          <p>${escapeHtml(JSON.stringify(item, null, 2))}</p>
         </details>
       `
     )

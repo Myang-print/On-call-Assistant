@@ -112,6 +112,39 @@ def test_v3_api_composes_answer_from_retrieved_sop_documents() -> None:
         assert source["filename"] in successful_reads
 
 
+def test_v3_api_keeps_v3_evidence_when_answer_llm_fails(monkeypatch) -> None:
+    class FailingAnswerComposer:
+        def compose(self, user_query, retrieved_docs, sources, trace):
+            return {
+                "answer": "问题判断：LLM失败后仍使用V3证据链回答。",
+                "sources": sources,
+                "trace": trace,
+                "answer_trace": [
+                    {
+                        "stage": "answer_composer",
+                        "event": "llm_call_failed",
+                        "error_type": "TimeoutError",
+                        "error": "request timed out",
+                        "fallback_layer": "v3_evidence",
+                    }
+                ],
+                "mode": "agent",
+            }
+
+    monkeypatch.setattr("app.agent.AnswerComposer", FailingAnswerComposer)
+    client = TestClient(app)
+
+    response = client.post("/api/oncall/query", json={"query": "服务 OOM 了怎么办？"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "回退到 v2" not in payload["answer"]
+    assert payload["sources"]
+    assert all(item.get("source_layer") != "v2_fallback" for item in payload["sources"])
+    assert any(item.get("event") == "llm_call_failed" for item in payload["trace"])
+    assert not any(item.get("rollback") == "v2" for item in payload["trace"])
+
+
 def test_v3_api_returns_insufficient_evidence_for_unrelated_noise_query() -> None:
     client = TestClient(app)
 
@@ -143,6 +176,7 @@ def test_v3_api_rolls_back_to_v2_when_agent_raises(monkeypatch) -> None:
     assert {item["id"] for item in payload["sources"][:2]} == {"sop-001", "sop-004"}
     assert all(item["source_layer"] == "v2_fallback" for item in payload["sources"])
     assert payload["trace"][0]["event"] == "agent_exception"
+    assert payload["trace"][0]["error_type"] == "RuntimeError"
     assert payload["trace"][0]["rollback"] == "v2"
 
 

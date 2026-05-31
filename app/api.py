@@ -83,6 +83,7 @@ def _rollback_to_v2_response(
             {
                 "stage": "api",
                 "event": event,
+                "error_type": type(error).__name__,
                 "error": str(error),
                 "rollback": "v2",
             }

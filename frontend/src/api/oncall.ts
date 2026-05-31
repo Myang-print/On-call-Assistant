@@ -91,9 +91,11 @@ async function querySearchEndpoint(url: string, query: string, mode: OnCallMode)
 }
 
 function normalizeResponsePayload(payload: BackendResponse, query: string): OnCallQueryResponse {
+  const answer = normalizeAnswer(payload.answer);
+  console.log("[api] answer type", typeof payload.answer, payload.answer === null ? "null" : "");
   return {
     query: typeof payload.query === "string" ? payload.query : query,
-    answer: typeof payload.answer === "string" ? payload.answer : "",
+    answer,
     sources: normalizeSources(payload.sources ?? payload.results),
     trace: Array.isArray(payload.trace) ? (payload.trace as OnCallTraceItem[]) : [],
     raw: payload
@@ -101,8 +103,13 @@ function normalizeResponsePayload(payload: BackendResponse, query: string): OnCa
 }
 
 async function getJson(url: string): Promise<BackendResponse> {
+  console.log("[api] request", { method: "GET", url });
   const response = await fetch(url);
-  const payload = (await response.json().catch(() => ({}))) as BackendResponse;
+  console.log("[api] status", response.status);
+  const raw = await response.text();
+  console.log("[api] raw response", raw);
+  const payload = parseJson(raw);
+  console.log("[api] parsed response", payload);
   if (!response.ok) {
     throw new Error(toErrorMessage(payload.detail, response.status));
   }
@@ -110,6 +117,7 @@ async function getJson(url: string): Promise<BackendResponse> {
 }
 
 async function postJson(url: string, body: Record<string, unknown>): Promise<BackendResponse> {
+  console.log("[api] request", { method: "POST", url, body });
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -118,11 +126,37 @@ async function postJson(url: string, body: Record<string, unknown>): Promise<Bac
     body: JSON.stringify(body)
   });
 
-  const payload = (await response.json().catch(() => ({}))) as BackendResponse;
+  console.log("[api] status", response.status);
+  const raw = await response.text();
+  console.log("[api] raw response", raw);
+  const payload = parseJson(raw);
+  console.log("[api] parsed response", payload);
   if (!response.ok) {
     throw new Error(toErrorMessage(payload.detail, response.status));
   }
   return payload;
+}
+
+function parseJson(raw: string): BackendResponse {
+  if (!raw.trim()) {
+    return {};
+  }
+  try {
+    return JSON.parse(raw) as BackendResponse;
+  } catch (error) {
+    console.log("[api] parse error", error);
+    throw new Error("Backend returned non-JSON response.");
+  }
+}
+
+function normalizeAnswer(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value === undefined || value === null) {
+    return "";
+  }
+  return JSON.stringify(value, null, 2);
 }
 
 function toSearchAnswer(mode: OnCallMode, query: string, sources: OnCallSource[]): string {

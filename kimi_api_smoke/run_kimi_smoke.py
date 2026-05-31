@@ -46,6 +46,7 @@ def main() -> int:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": "你好，我叫李雷，1+1等于多少？"},
             ],
+            temperature=1,
         )
     except Exception as error:
         print(f"request_ok=False")

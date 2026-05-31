@@ -79,6 +79,12 @@ def test_compose_calls_llm_with_retrieved_doc_prompt_when_docs_are_available() -
     assert "你是 OnCall 问题分析助手" in llm.prompts[0]
     assert "只能使用 provided documents" in llm.prompts[0]
     assert "不允许编造来源" in llm.prompts[0]
+    assert "请基于提供的SOP内容回答" in llm.prompts[0]
+    assert "1. 问题判断" in llm.prompts[0]
+    assert "2. 检查项（最多3条）" in llm.prompts[0]
+    assert "3. 操作步骤（最多5步）" in llm.prompts[0]
+    assert "4. 升级条件" in llm.prompts[0]
+    assert "总长度不超过250字" in llm.prompts[0]
     assert "服务 OOM 了怎么办？" in llm.prompts[0]
     assert "sop-001.html" in llm.prompts[0]
     assert "Java服务出现OutOfMemoryError时，Kubernetes会自动重启Pod" in llm.prompts[0]
@@ -119,6 +125,132 @@ def test_compose_falls_back_to_deterministic_summary_when_llm_fails() -> None:
     assert "见 sources" not in result["answer"]
     assert any(item["event"] == "llm_call_failed" for item in result["answer_trace"])
     assert any(item.get("answer_mode") == "deterministic_fallback" for item in result["answer_trace"])
+
+
+def test_llm_failure_trace_records_elapsed_time() -> None:
+    class TimeoutLLM:
+        timeout_seconds = 25.0
+        max_tokens = 400
+
+        def generate(self, prompt: str) -> str:
+            raise TimeoutError("request timed out")
+
+    result = AnswerComposer(TimeoutLLM()).compose(
+        user_query="服务 OOM 了怎么办？",
+        retrieved_docs=[
+            {
+                "filename": "sop-001.html",
+                "title": "后端服务 On-Call SOP",
+                "content": "查看JVM监控面板确认堆内存增长曲线。紧急情况下可先回滚到上一个稳定版本。",
+            }
+        ],
+        sources=[{"filename": "sop-001.html", "title": "后端服务 On-Call SOP"}],
+        trace=[],
+    )
+
+    failed_trace = next(item for item in result["answer_trace"] if item["event"] == "llm_call_failed")
+    assert failed_trace["error_type"] == "TimeoutError"
+    assert isinstance(failed_trace["elapsed_seconds"], float)
+    assert failed_trace["elapsed_seconds"] >= 0
+    assert failed_trace["prompt_chars"] > 0
+    assert failed_trace["timeout_seconds"] == 25.0
+    assert failed_trace["max_tokens"] == 400
+    assert "request_started_at" in failed_trace
+    assert "request_ended_at" in failed_trace
+
+
+def test_llm_success_trace_records_raw_and_final_answer_lengths_and_finish_reason() -> None:
+    class MetadataLLM:
+        timeout_seconds = 30.0
+        max_tokens = 120
+        last_metadata: dict[str, object] = {}
+
+        def generate(self, prompt: str) -> str:
+            self.last_metadata = {
+                "finish_reason": "length",
+                "raw_llm_answer_chars": 8,
+            }
+            return "  自然语言回答  "
+
+    result = AnswerComposer(MetadataLLM()).compose(
+        user_query="服务 OOM 了怎么办？",
+        retrieved_docs=[
+            {
+                "filename": "sop-001.html",
+                "title": "后端服务 On-Call SOP",
+                "content": "查看JVM监控面板确认堆内存增长曲线。",
+            }
+        ],
+        sources=[{"filename": "sop-001.html", "title": "后端服务 On-Call SOP"}],
+        trace=[],
+    )
+
+    success_trace = next(item for item in result["answer_trace"] if item["event"] == "llm_call_succeeded")
+    assert success_trace["finish_reason"] == "length"
+    assert success_trace["raw_llm_answer_chars"] == 8
+    assert success_trace["final_answer_chars"] == len("自然语言回答")
+    assert success_trace["answer_chars"] == len("自然语言回答")
+    assert success_trace["timeout_seconds"] == 30.0
+    assert success_trace["max_tokens"] == 120
+
+
+def test_empty_llm_answer_with_length_finish_reason_reports_token_exhaustion() -> None:
+    class EmptyLengthLLM:
+        timeout_seconds = 30.0
+        max_tokens = 400
+        last_metadata = {
+            "finish_reason": "length",
+            "raw_llm_answer_chars": 0,
+        }
+
+        def generate(self, prompt: str) -> str:
+            return ""
+
+    result = AnswerComposer(EmptyLengthLLM()).compose(
+        user_query="数据库主从延迟超过30秒怎么办？",
+        retrieved_docs=[
+            {
+                "filename": "sop-002.html",
+                "title": "数据库DBA On-Call SOP",
+                "content": "主从复制延迟时检查复制线程状态、GTID差异和SHOW SLAVE STATUS输出。",
+            }
+        ],
+        sources=[{"filename": "sop-002.html", "title": "数据库DBA On-Call SOP"}],
+        trace=[],
+    )
+
+    rejection_trace = next(item for item in result["answer_trace"] if item["event"] == "llm_answer_rejected")
+    assert rejection_trace["reason"] == "max_tokens_exhausted_before_visible_answer"
+    assert rejection_trace["finish_reason"] == "length"
+    assert rejection_trace["raw_llm_answer_chars"] == 0
+    assert any(item.get("answer_mode") == "deterministic_fallback" for item in result["answer_trace"])
+
+
+def test_prompt_uses_relevant_excerpts_instead_of_full_sop_content() -> None:
+    llm = RecordingLLM("问题判断：根据 sop-001.html 处理 OOM。")
+    irrelevant_block = "这是一段与告警无关的背景描述。" * 500
+    relevant_sentence = "Java服务出现OutOfMemoryError时，检查最近是否有代码发布或配置变更。"
+
+    result = AnswerComposer(llm).compose(
+        user_query="服务 OOM 了怎么办？",
+        retrieved_docs=[
+            {
+                "filename": "sop-001.html",
+                "title": "后端服务 On-Call SOP",
+                "content": f"{irrelevant_block}{relevant_sentence}",
+            }
+        ],
+        sources=[{"filename": "sop-001.html", "title": "后端服务 On-Call SOP"}],
+        trace=[],
+    )
+
+    prompt = llm.prompts[0]
+    prompt_trace = next(item for item in result["answer_trace"] if item["event"] == "prompt_built")
+    assert relevant_sentence in prompt
+    assert len(prompt) < len(irrelevant_block)
+    assert prompt_trace["prompt_strategy"] == "relevant_excerpts"
+    assert prompt_trace["source_content_chars"] > prompt_trace["prompt_chars"]
+    assert prompt_trace["excerpt_count"] >= 1
 
 
 def test_compose_preserves_input_sources_and_trace() -> None:

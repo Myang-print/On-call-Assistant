@@ -1,4 +1,6 @@
 import re
+import time
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from app.llm_client import DeterministicLLMClient
@@ -22,8 +24,18 @@ class DeterministicAnswerLLMClient:
 class CompleteToGenerateAdapter:
     def __init__(self, llm_client: SelectedLLMClient) -> None:
         self._llm_client = llm_client
+        self.last_metadata: dict[str, Any] = {}
+        self.timeout_seconds = getattr(llm_client, "timeout", None)
+        self.max_tokens = getattr(llm_client, "max_tokens", None)
 
     def generate(self, prompt: str) -> str:
+        if hasattr(self._llm_client, "complete_with_metadata"):
+            completion = self._llm_client.complete_with_metadata(prompt)
+            self.last_metadata = {
+                "finish_reason": getattr(completion, "finish_reason", None),
+                "raw_llm_answer_chars": getattr(completion, "raw_answer_chars", len(completion.content)),
+            }
+            return completion.content
         return self._llm_client.complete(prompt)
 
 
@@ -65,17 +77,15 @@ class AnswerComposer:
                 "mode": "agent",
             }
 
-        prompt = _build_answer_prompt(user_query, retrieved_docs, sources)
+        prompt, prompt_metadata = _build_answer_prompt(user_query, retrieved_docs, sources)
         answer_trace.append(
             {
                 "stage": "answer_composer",
                 "event": "prompt_built",
-                "retrieved_doc_count": len(retrieved_docs),
-                "source_count": len(sources),
-                "prompt_chars": len(prompt),
+                **prompt_metadata,
             }
         )
-        answer, generation_trace = _generate_llm_answer(self._llm_client, prompt)
+        answer, generation_trace = _generate_llm_answer(self._llm_client, prompt, prompt_metadata)
         answer_trace.extend(generation_trace)
         if not answer:
             answer = _compose_deterministic_answer(user_query, retrieved_docs, sources)
@@ -116,16 +126,25 @@ def _default_answer_llm_client() -> tuple[AnswerLLMClient | None, list[dict[str,
             }
         ]
     adapter = CompleteToGenerateAdapter(selected_client)
-    return adapter, [
-        {
-            "stage": "answer_composer",
-            "event": "llm_client_created",
-            "client_type": type(selected_client).__name__,
-        }
-    ]
+    client_trace: dict[str, Any] = {
+        "stage": "answer_composer",
+        "event": "llm_client_created",
+        "client_type": type(selected_client).__name__,
+    }
+    if hasattr(selected_client, "timeout"):
+        client_trace["timeout_seconds"] = getattr(selected_client, "timeout")
+    if hasattr(selected_client, "max_tokens"):
+        client_trace["max_tokens"] = getattr(selected_client, "max_tokens")
+    if hasattr(selected_client, "thinking"):
+        client_trace["thinking"] = getattr(selected_client, "thinking")
+    return adapter, [client_trace]
 
 
-def _generate_llm_answer(llm_client: AnswerLLMClient | None, prompt: str) -> tuple[str, list[dict[str, Any]]]:
+def _generate_llm_answer(
+    llm_client: AnswerLLMClient | None,
+    prompt: str,
+    prompt_metadata: dict[str, Any],
+) -> tuple[str, list[dict[str, Any]]]:
     if llm_client is None:
         return "", [
             {
@@ -134,30 +153,48 @@ def _generate_llm_answer(llm_client: AnswerLLMClient | None, prompt: str) -> tup
                 "reason": "no_llm_client",
             }
         ]
+    started_at = _utc_now_iso()
+    started_perf = time.perf_counter()
+    trace = [
+        {
+            "stage": "answer_composer",
+            "event": "llm_call_started",
+            "client_type": type(llm_client).__name__,
+            "request_started_at": started_at,
+            **_llm_request_diagnostics(llm_client, prompt_metadata),
+        }
+    ]
     try:
-        trace = [
-            {
-                "stage": "answer_composer",
-                "event": "llm_call_started",
-                "client_type": type(llm_client).__name__,
-            }
-        ]
         answer = llm_client.generate(prompt).strip()
     except Exception as error:
-        return "", [
+        elapsed_seconds = _elapsed_seconds(started_perf)
+        trace.append(
             {
                 "stage": "answer_composer",
                 "event": "llm_call_failed",
                 "error_type": type(error).__name__,
                 "error": _safe_error_message(error),
+                "request_started_at": started_at,
+                "request_ended_at": _utc_now_iso(),
+                "elapsed_seconds": elapsed_seconds,
+                **_llm_request_diagnostics(llm_client, prompt_metadata),
             }
+        )
+        return "", [
+            *trace,
         ]
+    elapsed_seconds = _elapsed_seconds(started_perf)
     if not answer or "runtime status" in answer:
         trace.append(
             {
                 "stage": "answer_composer",
                 "event": "llm_answer_rejected",
-                "reason": "empty_or_runtime_status",
+                "reason": _answer_rejection_reason(llm_client, answer),
+                "request_started_at": started_at,
+                "request_ended_at": _utc_now_iso(),
+                "elapsed_seconds": elapsed_seconds,
+                **_llm_request_diagnostics(llm_client, prompt_metadata),
+                **_llm_completion_diagnostics(llm_client, answer),
             }
         )
         return "", trace
@@ -167,9 +204,56 @@ def _generate_llm_answer(llm_client: AnswerLLMClient | None, prompt: str) -> tup
             "event": "llm_call_succeeded",
             "answer_mode": "llm",
             "answer_chars": len(answer),
+            "final_answer_chars": len(answer),
+            "request_started_at": started_at,
+            "request_ended_at": _utc_now_iso(),
+            "elapsed_seconds": elapsed_seconds,
+            **_llm_request_diagnostics(llm_client, prompt_metadata),
+            **_llm_completion_diagnostics(llm_client, answer),
         }
     )
     return answer, trace
+
+
+def _answer_rejection_reason(llm_client: AnswerLLMClient, answer: str) -> str:
+    metadata = getattr(llm_client, "last_metadata", {})
+    if not answer and isinstance(metadata, dict) and metadata.get("finish_reason") == "length":
+        return "max_tokens_exhausted_before_visible_answer"
+    if not answer:
+        return "empty_answer"
+    return "runtime_status"
+
+
+def _llm_request_diagnostics(llm_client: AnswerLLMClient, prompt_metadata: dict[str, Any]) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {
+        "prompt_chars": prompt_metadata.get("prompt_chars", 0),
+    }
+    if hasattr(llm_client, "timeout_seconds"):
+        diagnostics["timeout_seconds"] = getattr(llm_client, "timeout_seconds")
+    if hasattr(llm_client, "max_tokens"):
+        diagnostics["max_tokens"] = getattr(llm_client, "max_tokens")
+    return diagnostics
+
+
+def _llm_completion_diagnostics(llm_client: AnswerLLMClient, answer: str) -> dict[str, Any]:
+    metadata = getattr(llm_client, "last_metadata", {})
+    diagnostics: dict[str, Any] = {
+        "raw_llm_answer_chars": len(answer),
+    }
+    if isinstance(metadata, dict):
+        if metadata.get("finish_reason") is not None:
+            diagnostics["finish_reason"] = metadata.get("finish_reason")
+        if metadata.get("raw_llm_answer_chars") is not None:
+            diagnostics["raw_llm_answer_chars"] = metadata.get("raw_llm_answer_chars")
+    return diagnostics
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _elapsed_seconds(started_perf: float) -> float:
+    return round(time.perf_counter() - started_perf, 3)
 
 
 def _safe_error_message(error: Exception) -> str:
@@ -323,26 +407,30 @@ def _build_answer_prompt(
     user_query: str,
     retrieved_docs: list[dict[str, Any]],
     sources: list[dict[str, Any]],
-) -> str:
-    documents_text = "\n\n".join(_format_document(document) for document in retrieved_docs)
+) -> tuple[str, dict[str, Any]]:
+    documents_text, excerpt_metadata = _format_relevant_documents(user_query, retrieved_docs)
     sources_text = "\n".join(
         f"- filename: {source.get('filename', '')}; title: {source.get('title', '')}"
         for source in sources
     )
-    return f"""
+    prompt = f"""
 你是 OnCall 问题分析助手。
+请基于提供的SOP内容回答。
 只能使用 provided documents 回答用户问题。
 不允许编造来源。
 不输出工具调用过程。
 不输出 runtime status。
 如果证据不足，明确说明缺失信息。
+必须把 provided documents 中的具体事实转写进回答，例如指标、命令、回滚、扩容、隔离、升级或排查条件。
 
-回答必须包含：
-- 问题判断
-- 优先检查项
-- 建议操作
-- 不确定项
-- 引用来源
+输出格式：
+
+1. 问题判断
+2. 检查项（最多3条）
+3. 操作步骤（最多5步）
+4. 升级条件
+
+总长度不超过250字。
 
 user_query:
 {user_query}
@@ -353,14 +441,58 @@ provided documents:
 provided sources:
 {sources_text}
 """.strip()
+    return prompt, {
+        "retrieved_doc_count": len(retrieved_docs),
+        "source_count": len(sources),
+        "prompt_chars": len(prompt),
+        "source_content_chars": excerpt_metadata["source_content_chars"],
+        "excerpt_count": excerpt_metadata["excerpt_count"],
+        "prompt_strategy": "relevant_excerpts",
+    }
 
 
-def _format_document(document: dict[str, Any]) -> str:
+def _format_relevant_documents(user_query: str, retrieved_docs: list[dict[str, Any]]) -> tuple[str, dict[str, int]]:
+    source_content_chars = 0
+    excerpt_count = 0
+    formatted_documents: list[str] = []
+    for document in retrieved_docs:
+        content = _document_content(document)
+        source_content_chars += len(content)
+        excerpts = _document_relevant_excerpts(user_query, content)
+        excerpt_count += len(excerpts)
+        formatted_documents.append(_format_document(document, excerpts))
+    return "\n\n".join(formatted_documents), {
+        "source_content_chars": source_content_chars,
+        "excerpt_count": excerpt_count,
+    }
+
+
+def _document_content(document: dict[str, Any]) -> str:
     content = document.get("content")
     if content is None:
         content = document.get("cleaned_text", "")
+    return str(content)
+
+
+def _document_relevant_excerpts(user_query: str, content: str, max_excerpts: int = 8) -> list[str]:
+    sentences = _split_sentences(content)
+    terms = _query_terms(user_query)
+    scored: list[tuple[int, int, str]] = []
+    for index, sentence in enumerate(sentences):
+        score = _score_sentence(sentence, terms)
+        if score > 0:
+            scored.append((score, -index, sentence))
+    scored.sort(reverse=True)
+    excerpts = _deduplicate_sentence(sentence for _, __, sentence in scored[:max_excerpts])
+    if excerpts:
+        return excerpts
+    return _deduplicate_sentence(sentences[:3])
+
+
+def _format_document(document: dict[str, Any], excerpts: list[str]) -> str:
     return (
         f"filename: {document.get('filename', '')}\n"
         f"title: {document.get('title', '')}\n"
-        f"content:\n{content}"
+        "relevant_content:\n"
+        + "\n".join(f"- {excerpt}" for excerpt in excerpts)
     )

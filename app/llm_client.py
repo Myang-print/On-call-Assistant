@@ -1,11 +1,10 @@
 import json
 import os
-from pathlib import Path
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 from typing import Protocol
-
-import httpx
 
 from app.schemas import LLMObservation
 
@@ -16,6 +15,13 @@ _DOTENV_LOADED = False
 class LLMClient(Protocol):
     def complete(self, prompt: str) -> str:
         ...
+
+
+@dataclass(frozen=True)
+class LLMCompletion:
+    content: str
+    finish_reason: str | None
+    raw_answer_chars: int
 
 
 @dataclass(frozen=True)
@@ -40,24 +46,34 @@ class MoonshotLLMClient:
     api_key: str
     base_url: str = "https://api.moonshot.cn/v1"
     model: str = "kimi-k2.6"
-    timeout: float = 30.0
+    timeout: float = 90.0
+    max_tokens: int = 1200
+    thinking: str = "disabled"
+    client_factory: Callable[..., Any] | None = None
 
     def complete(self, prompt: str) -> str:
-        endpoint = self.base_url.rstrip("/") + "/chat/completions"
-        payload = {
+        return self.complete_with_metadata(prompt).content
+
+    def complete_with_metadata(self, prompt: str) -> LLMCompletion:
+        factory = self.client_factory or _openai_client_factory()
+        client = factory(api_key=self.api_key, base_url=self.base_url, timeout=self.timeout)
+        completion_args: dict[str, Any] = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.2,
+            "max_tokens": self.max_tokens,
         }
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        with httpx.Client(timeout=self.timeout) as client:
-            response = client.post(endpoint, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-        return str(data["choices"][0]["message"]["content"])
+        if self.thinking == "disabled":
+            completion_args["extra_body"] = {"thinking": {"type": "disabled"}}
+        else:
+            completion_args["temperature"] = 1
+        completion = client.chat.completions.create(**completion_args)
+        choice = completion.choices[0]
+        content = str(choice.message.content)
+        return LLMCompletion(
+            content=content,
+            finish_reason=getattr(choice, "finish_reason", None),
+            raw_answer_chars=len(content),
+        )
 
 
 def select_llm_client(provider: str | None = None) -> LLMClient:
@@ -72,6 +88,9 @@ def select_llm_client(provider: str | None = None) -> LLMClient:
             api_key=api_key,
             base_url=_env("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1"),
             model=_env("MOONSHOT_MODEL", "kimi-k2.6"),
+            timeout=_env_float("MOONSHOT_TIMEOUT_SECONDS", 90.0),
+            max_tokens=_env_int("MOONSHOT_MAX_TOKENS", 1200),
+            thinking=_env_choice("MOONSHOT_THINKING", "disabled", {"enabled", "disabled"}),
         )
     raise ValueError(f"unsupported llm provider: {selected_provider}")
 
@@ -101,3 +120,40 @@ def _load_dotenv_once() -> None:
 
 def _strip_env_quotes(value: str) -> str:
     return value.strip().strip("\"'“”‘’")
+
+
+def _env_float(name: str, default: float) -> float:
+    raw_value = _env(name, "")
+    if not raw_value:
+        return default
+    try:
+        value = float(raw_value)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw_value = _env(name, "")
+    if not raw_value:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _env_choice(name: str, default: str, allowed: set[str]) -> str:
+    value = _env(name, "").casefold()
+    if not value:
+        return default
+    return value if value in allowed else default
+
+
+def _openai_client_factory() -> Callable[..., Any]:
+    try:
+        from openai import OpenAI
+    except ImportError as error:
+        raise RuntimeError('OpenAI SDK is required for Moonshot. Run: pip install --upgrade "openai>=1.0"') from error
+    return OpenAI
