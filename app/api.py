@@ -46,6 +46,7 @@ def query_oncall_agent(payload: OnCallQueryRequest, request: Request) -> dict[st
             query,
             RuntimeError(str(result.get("error", "unknown error"))),
             event="agent_failed",
+            extra_trace=result.get("trace", []) if isinstance(result.get("trace", []), list) else [],
         )
 
     return {
@@ -60,16 +61,25 @@ def _rollback_to_v2_response(
     query: str,
     error: Exception,
     event: str = "agent_exception",
+    extra_trace: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     documents = DocumentStore.from_data_dir().all()
     domain_dictionary = load_domain_dictionary(DATA_DIR / "domain_dictionary.json")
-    results = hybrid_search_documents(documents, query, domain_dictionary)
+    results = [
+        {
+            **dict(result),
+            "source_layer": "v2_fallback",
+            "fallback": True,
+        }
+        for result in hybrid_search_documents(documents, query, domain_dictionary)
+    ]
     top = ", ".join(str(item.get("id", "source")) for item in results[:3]) or "无匹配文档"
     return {
         "query": query,
         "answer": f"Agent 运行异常，已回退到 v2 检索结果。优先查看：{top}。",
         "sources": results,
         "trace": [
+            *(extra_trace or []),
             {
                 "stage": "api",
                 "event": event,

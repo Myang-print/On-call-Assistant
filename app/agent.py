@@ -1,16 +1,10 @@
 from collections.abc import Callable
-import re
 from typing import Any, Protocol
 
 from app.agent_runtime import run_deterministic_agent
 from app.answer_composer import AnswerComposer
-from app.documents import DocumentStore
-from app.hybrid_search import hybrid_search_documents
-from app.key_search import search_documents
 from app.planner import SYSTEM_PROMPT as SYSTEM_STATE
 from app.planner import PlannerResult, plan_with_llm
-from app.semantic_search import load_domain_dictionary
-from app.settings import DATA_DIR
 from app.tool_registry import TOOL_REGISTRY
 
 
@@ -31,7 +25,7 @@ class Composer(Protocol):
 def run_agent_once(
     user_prompt: str,
     planner: Planner | None = None,
-    max_step: int = 3,
+    max_step: int = 6,
     answer_composer: Composer | None = None,
     documents: list[Any] | None = None,
 ) -> dict[str, Any]:
@@ -63,11 +57,15 @@ def run_agent_once(
         sources=sources,
         trace=_extract_runtime_trace(runtime_result),
     )
+    answer_trace = composed_answer.get("answer_trace", [])
+    agent_trace = [{"stage": "agent", "event": "tool_allowed", "tool": tool_name}]
+    if isinstance(answer_trace, list):
+        agent_trace.extend(item for item in answer_trace if isinstance(item, dict))
     return {
         "ok": True,
         "retry": False,
         "tool": tool_name,
-        "trace": [{"stage": "agent", "event": "tool_allowed", "tool": tool_name}],
+        "trace": agent_trace,
         "runtime": runtime_result,
         "answer": composed_answer["answer"],
         "sources": composed_answer["sources"],
@@ -110,58 +108,4 @@ def _retrieve_evidence_for_query(
     if runtime_docs:
         return runtime_docs, runtime_sources
 
-    active_documents = documents if documents is not None else DocumentStore.from_data_dir().all()
-    sources = _rank_agent_sources(active_documents, user_prompt)
-    documents_by_id = {document.doc_id: document for document in active_documents}
-    retrieved_docs: list[dict[str, Any]] = []
-    for source in sources:
-        document = documents_by_id.get(str(source.get("id", "")))
-        if document is None:
-            continue
-        retrieved_docs.append(
-            {
-                "filename": f"{document.doc_id}.html",
-                "title": document.title,
-                "content": document.cleaned_text,
-                "cleaned_text": document.cleaned_text,
-            }
-        )
-    return retrieved_docs, sources
-
-
-def _rank_agent_sources(documents: list[Any], user_prompt: str) -> list[dict[str, Any]]:
-    dictionary = load_domain_dictionary(DATA_DIR / "domain_dictionary.json")
-    results = hybrid_search_documents(documents, user_prompt, dictionary)
-    if not results:
-        results = _keyword_evidence_search(documents, user_prompt)
-    return [dict(result) for result in results[:5]]
-
-
-def _keyword_evidence_search(documents: list[Any], user_prompt: str) -> list[dict[str, Any]]:
-    merged: dict[str, dict[str, Any]] = {}
-    for term in _agent_query_terms(user_prompt):
-        for result in search_documents(documents, term):
-            doc_id = str(result["id"])
-            current = merged.get(doc_id)
-            if current is None or float(result["score"]) > float(current["score"]):
-                merged[doc_id] = dict(result)
-    return sorted(merged.values(), key=lambda result: (-float(result["score"]), str(result["id"])))
-
-
-def _agent_query_terms(user_prompt: str) -> list[str]:
-    folded = user_prompt.casefold()
-    terms = [user_prompt.strip()]
-    terms.extend(re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]*", user_prompt))
-    if "oom" in folded or "内存" in user_prompt:
-        terms.append("OOM")
-    if "主从" in user_prompt or "延迟" in user_prompt:
-        terms.append("主从延迟")
-    if "入侵" in user_prompt or "黑客" in user_prompt or "攻击" in user_prompt:
-        terms.append("入侵")
-    if "推荐" in user_prompt or "质量下降" in user_prompt:
-        terms.append("推荐")
-    if "p0" in folded or "故障" in user_prompt:
-        terms.append("故障")
-    if "cdn" in folded:
-        terms.append("CDN")
-    return [term for index, term in enumerate(terms) if term and term not in terms[:index]]
+    return [], []

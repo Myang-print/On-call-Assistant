@@ -73,6 +73,7 @@ def test_agent_read_file_pipeline_is_stable() -> None:
     assert result["ok"] is True
     assert result["retry"] is False
     assert result["tool"] == "readFile"
-    assert result["trace"] == [{"stage": "agent", "event": "tool_allowed", "tool": "readFile"}]
+    assert result["trace"][0] == {"stage": "agent", "event": "tool_allowed", "tool": "readFile"}
+    assert any(item["event"] == "insufficient_evidence" for item in result["trace"])
     assert result["runtime"]["status"] == "finished"
     assert result["runtime"]["trace"][0]["action"] == {"type": "readFile", "fname": "manifest.json"}

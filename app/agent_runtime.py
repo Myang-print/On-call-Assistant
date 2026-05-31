@@ -68,7 +68,7 @@ def run_deterministic_agent(
             tool_timeout_seconds=tool_timeout_seconds,
         )
         content = observation.pop("_content", None)
-        _record_successful_content(state, action, observation, content)
+        _record_source_acceptance(state, action, observation, content)
         event = {
             "step": state.step,
             "action": action,
@@ -158,31 +158,41 @@ def _rollback_to_v2(fallback_to_v2: FallbackToV2 | None) -> dict[str, Any]:
     }
 
 
-def _record_successful_content(
+def _record_source_acceptance(
     state: AgentState,
     action: dict[str, str],
     observation: dict[str, Any],
     content: str | None,
 ) -> None:
-    if not observation["ok"] or action["type"] != "readFile" or content is None:
+    if action["type"] != "readFile":
         return
 
     filename = action["fname"]
+    observation["accepted_as_source"] = False
+
+    if not observation["ok"]:
+        observation["reject_reason"] = "read_failed"
+        return
+    if content is None:
+        observation["reject_reason"] = "empty_tool_content"
+        return
     if filename == "manifest.json":
+        observation["reject_reason"] = "manifest_not_source"
         _record_manifest_selection(state, content)
         return
 
     entry = _manifest_entry_for_filename(state, filename)
     if entry is None:
-        observation["accepted_as_source"] = False
+        observation["reject_reason"] = "not_manifest_candidate"
         return
 
     document = parse_html_document(doc_id=Path(filename).stem, raw_html=content)
     if document.title != str(entry.get("title", "")):
-        observation["accepted_as_source"] = False
+        observation["reject_reason"] = "title_mismatch"
         return
 
     observation["accepted_as_source"] = True
+    observation["reject_reason"] = ""
     state.retrieved_docs.append(
         {
             "filename": filename,

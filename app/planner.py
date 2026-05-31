@@ -1,4 +1,5 @@
 import json
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -44,7 +45,8 @@ def plan_with_llm(
     user_prompt: str,
     llm_client: LLMCallable | SelectedLLMClient | None = None,
 ) -> PlannerResult:
-    selected_client = llm_client or select_llm_client()
+    planner_provider = os.getenv("ONCALL_PLANNER_PROVIDER", "deterministic")
+    selected_client = llm_client or select_llm_client(provider=planner_provider)
     prompt = f"{system_prompt}\n\n{user_prompt}"
     if callable(selected_client):
         response = selected_client(prompt)

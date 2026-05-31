@@ -35,7 +35,7 @@ def test_uploaded_html_document_is_searchable_by_v1_and_v2() -> None:
     assert "final-upload-sop" in [item["id"] for item in v2_response.json()["results"]]
 
 
-def test_uploaded_html_document_is_visible_to_v3_agent() -> None:
+def test_uploaded_html_document_does_not_pollute_v3_tool_evidence_chain() -> None:
     client = TestClient(app)
     payload = {
         "id": "final-v3-upload-sop",
@@ -51,8 +51,8 @@ def test_uploaded_html_document_is_visible_to_v3_agent() -> None:
     assert create_response.status_code == 201
     assert response.status_code == 200
     body = response.json()
-    assert "当前没有足够的 SOP 文档支持判断" not in body["answer"]
-    assert "final-v3-upload-sop" in [item["id"] for item in body["sources"]]
+    assert "当前没有足够的 SOP 文档支持判断" in body["answer"]
+    assert "final-v3-upload-sop" not in [item.get("id") for item in body["sources"]]
 
 
 def test_document_upload_rejects_bad_name_and_bad_document() -> None:
@@ -93,8 +93,38 @@ def test_v3_api_composes_answer_from_retrieved_sop_documents() -> None:
     payload = response.json()
     assert "当前没有足够的 SOP 文档支持判断" not in payload["answer"]
     assert "runtime status" not in payload["answer"]
+    assert "查看JVM监控面板" in payload["answer"]
+    assert "检查最近是否有代码发布或配置变更" in payload["answer"]
+    assert "回滚到上一个稳定版本" in payload["answer"]
+    assert "sop-001.html" in payload["answer"]
+    assert "见 sources" not in payload["answer"]
     assert payload["sources"]
     assert payload["sources"][0]["id"] == "sop-001"
+    successful_reads = {
+        item["action"]["fname"]
+        for item in payload["trace"]
+        if item.get("action", {}).get("type") == "readFile"
+        and item.get("observation", {}).get("ok") is True
+        and item.get("observation", {}).get("accepted_as_source") is True
+    }
+    assert successful_reads
+    for source in payload["sources"]:
+        assert source["filename"] in successful_reads
+
+
+def test_v3_api_returns_insufficient_evidence_for_unrelated_noise_query() -> None:
+    client = TestClient(app)
+
+    response = client.post("/api/oncall/query", json={"query": "1+1=?"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "当前没有足够的 SOP 文档支持判断" in payload["answer"]
+    assert payload["sources"] == []
+    assert not any(
+        item.get("observation", {}).get("accepted_as_source") is True
+        for item in payload["trace"]
+    )
 
 
 def test_v3_api_rolls_back_to_v2_when_agent_raises(monkeypatch) -> None:
@@ -111,7 +141,9 @@ def test_v3_api_rolls_back_to_v2_when_agent_raises(monkeypatch) -> None:
     assert "回退到 v2" in payload["answer"]
     assert payload["sources"]
     assert {item["id"] for item in payload["sources"][:2]} == {"sop-001", "sop-004"}
+    assert all(item["source_layer"] == "v2_fallback" for item in payload["sources"])
     assert payload["trace"][0]["event"] == "agent_exception"
+    assert payload["trace"][0]["rollback"] == "v2"
 
 
 def test_v3_api_rolls_back_to_v2_when_agent_returns_failure(monkeypatch) -> None:
@@ -127,4 +159,6 @@ def test_v3_api_rolls_back_to_v2_when_agent_returns_failure(monkeypatch) -> None
     payload = response.json()
     assert "回退到 v2" in payload["answer"]
     assert payload["sources"][0]["id"] == "sop-005"
-    assert payload["trace"][0]["event"] == "agent_failed"
+    assert payload["sources"][0]["source_layer"] == "v2_fallback"
+    assert payload["trace"][0]["event"] == "planner_failed"
+    assert payload["trace"][1]["event"] == "agent_failed"

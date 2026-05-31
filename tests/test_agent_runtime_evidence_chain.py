@@ -53,6 +53,24 @@ def test_runtime_does_not_add_failed_sop_read_to_sources_or_docs() -> None:
     assert result["sources"] == []
     assert result["trace"][1]["action"] == {"type": "readFile", "fname": "sop-001.html"}
     assert result["trace"][1]["observation"]["ok"] is False
+    assert result["trace"][1]["observation"]["accepted_as_source"] is False
+    assert result["trace"][1]["observation"]["reject_reason"] == "read_failed"
+
+
+def test_runtime_records_source_acceptance_for_every_readfile() -> None:
+    result = run_deterministic_agent(max_step=5, query="服务 OOM 了怎么办？")
+
+    read_events = [event for event in result["trace"] if event["action"]["type"] == "readFile"]
+
+    assert read_events
+    for event in read_events:
+        assert "accepted_as_source" in event["observation"]
+        if event["observation"]["accepted_as_source"] is False:
+            assert "reject_reason" in event["observation"]
+
+    assert read_events[0]["action"]["fname"] == "manifest.json"
+    assert read_events[0]["observation"]["accepted_as_source"] is False
+    assert read_events[0]["observation"]["reject_reason"] == "manifest_not_source"
 
 
 def test_runtime_rejects_source_without_successful_readfile_trace() -> None:
@@ -85,6 +103,7 @@ def test_runtime_rejects_inauthentic_sop_content_from_sources() -> None:
     assert result["sources"] == []
     assert result["trace"][1]["observation"]["ok"] is True
     assert result["trace"][1]["observation"]["accepted_as_source"] is False
+    assert result["trace"][1]["observation"]["reject_reason"] == "title_mismatch"
 
 
 def test_runtime_does_not_read_unsafe_manifest_filename() -> None:

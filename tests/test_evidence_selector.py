@@ -51,3 +51,19 @@ def test_selector_ignores_manifest_entries_without_safe_html_filename() -> None:
     selected = select_sop_filenames("入侵", manifest)
 
     assert selected == ["safe.html"]
+
+
+def test_selector_ignores_short_numeric_or_symbol_noise_query() -> None:
+    selected = select_sop_filenames("1+1=?", _manifest())
+
+    logger.info("noise_query_selected=%s", selected)
+    assert selected == []
+
+
+def test_selector_partial_keyword_match_requires_meaningful_token_length() -> None:
+    manifest = [
+        {"doc_id": "sop-001", "filename": "sop-001.html", "title": "后端服务", "keywords": ["SOP-001"]},
+    ]
+
+    assert select_sop_filenames("1", manifest) == []
+    assert select_sop_filenames("SOP-001", manifest) == ["sop-001.html"]

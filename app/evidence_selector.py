@@ -37,8 +37,8 @@ def select_sop_filenames(
 
 def _query_terms(query: str, manifest: list[dict[str, Any]]) -> list[str]:
     folded_query = query.casefold()
-    terms = [query.strip()]
-    terms.extend(ASCII_TOKEN_PATTERN.findall(query))
+    terms = []
+    terms.extend(_safe_ascii_terms(query))
 
     for entry in manifest:
         for keyword in _entry_keywords(entry):
@@ -70,10 +70,25 @@ def _score_entry(entry: dict[str, Any], terms: list[str]) -> float:
             score += 3.0
         if folded in folded_keywords:
             score += 6.0
-        elif any(folded in keyword for keyword in folded_keywords):
+        elif _allows_partial_match(folded) and any(folded in keyword for keyword in folded_keywords):
             score += 2.0
 
     return score
+
+
+def _safe_ascii_terms(query: str) -> list[str]:
+    terms: list[str] = []
+    for token in ASCII_TOKEN_PATTERN.findall(query):
+        if token.isdigit() and len(token) < 3:
+            continue
+        if len(token) < 2:
+            continue
+        terms.append(token)
+    return terms
+
+
+def _allows_partial_match(term: str) -> bool:
+    return len(term) >= 3 and not term.isdigit()
 
 
 def _entry_keywords(entry: dict[str, Any]) -> list[str]:

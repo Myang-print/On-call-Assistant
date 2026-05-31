@@ -72,3 +72,13 @@ def test_plan_with_llm_calls_llm_and_validates_response() -> None:
     logger.info("llm_prompts=%s result=%s", prompts, result)
     assert prompts == ["SYSTEM\n\nUSER"]
     assert result.ok is True
+
+
+def test_default_planner_stays_deterministic_when_answer_llm_provider_is_moonshot(monkeypatch) -> None:
+    monkeypatch.setenv("ONCALL_LLM_PROVIDER", "moonshot")
+    monkeypatch.delenv("ONCALL_PLANNER_PROVIDER", raising=False)
+
+    result = plan_with_llm("SYSTEM", "USER")
+
+    assert result.ok is True
+    assert result.action == {"action": "tool", "tool": "readFile", "args": {"fname": "manifest.json"}}
