@@ -55,6 +55,7 @@ document.querySelector("#app").innerHTML = `
       <aside class="history-panel">
         <div class="history-header">
           <p>History</p>
+          <button class="history-clear" type="button" data-clear-history>Clear</button>
           <button type="button" data-history-toggle aria-label="Hide history">‹</button>
         </div>
         <div class="session-list" data-session-list></div>
@@ -292,6 +293,10 @@ document.querySelector("[data-delete-history]").addEventListener("click", () => 
   deleteHistoryEntry(pendingDelete);
   pendingDelete = null;
   hideContextMenu();
+});
+
+document.querySelector("[data-clear-history]").addEventListener("click", () => {
+  clearHistory();
 });
 
 document.addEventListener("click", (event) => {
@@ -672,6 +677,19 @@ function deleteHistoryEntry(entry) {
   renderApp();
 }
 
+function clearHistory() {
+  appState.sessions.forEach((session) => {
+    session.messages = [];
+    session.trace = [];
+    session.updatedAt = Date.now();
+  });
+  appState.activeResponseId = "";
+  pendingDelete = null;
+  hideContextMenu();
+  saveState();
+  renderApp();
+}
+
 function normalizeStoredState(state) {
   state.activeResponseId = state.activeResponseId || "";
   state.sessions.forEach((session) => {
@@ -706,12 +724,12 @@ function renderTrace(traceItems) {
   traceList.innerHTML = traceItems
     .map(
       (item) => `
-        <details class="trace-item" open>
+        <details class="trace-item">
           <summary>
             <span>${escapeHtml(item.step ?? "-")}</span>
             <strong>${escapeHtml(item.event || item.stage || "trace")}</strong>
           </summary>
-          <p>${escapeHtml(JSON.stringify(item, null, 2))}</p>
+          <pre>${escapeHtml(JSON.stringify(item, null, 2))}</pre>
         </details>
       `
     )
