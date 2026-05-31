@@ -720,14 +720,15 @@ function renderDebugPanel(session) {
 }
 
 function renderTrace(traceItems) {
-  traceCount.textContent = `${traceItems.length} steps`;
-  traceList.innerHTML = traceItems
-    .map((item) => {
+  const visibleTraceItems = traceItems.filter(shouldShowTraceItem);
+  traceCount.textContent = `${visibleTraceItems.length} steps`;
+  traceList.innerHTML = visibleTraceItems
+    .map((item, index) => {
       const view = formatTraceForUser(item);
       return `
         <details class="trace-item">
           <summary>
-            <span>${escapeHtml(item.step ?? "-")}</span>
+            <span>${escapeHtml(index + 1)}</span>
             <strong>${escapeHtml(view.title)}</strong>
           </summary>
           <pre>${escapeHtml(view.pretty)}</pre>
@@ -741,6 +742,18 @@ function renderTrace(traceItems) {
     .join("");
 }
 
+function shouldShowTraceItem(item) {
+  const event = item.event || "";
+  const action = item.action || {};
+  if (event === "llm_client_created" || event === "frontend_answer_received") {
+    return false;
+  }
+  if (action.type === "finish") {
+    return false;
+  }
+  return true;
+}
+
 function formatTraceForUser(item) {
   const action = item.action || {};
   const observation = item.observation || {};
@@ -750,7 +763,13 @@ function formatTraceForUser(item) {
 
   const event = item.event || "";
   if (event === "tool_allowed") {
-    return traceView("工具授权完成", [`已允许 Agent 使用 ${item.tool || "工具"}。`]);
+    return traceView("决定读取 SOP 文件", ["Agent 已选择通过受限 readFile 工具获取 SOP 证据。"]);
+  }
+  if (event === "insufficient_evidence") {
+    return traceView("SOP 证据不足", [
+      "没有找到可作为回答依据的 SOP 文档。",
+      "请补充更明确的故障现象、系统名称、错误码或告警信息。"
+    ]);
   }
   if (event === "llm_client_created") {
     return traceView("LLM 已连接", [
@@ -761,20 +780,17 @@ function formatTraceForUser(item) {
     ]);
   }
   if (event === "prompt_built") {
-    return traceView("已整理 SOP 证据", [
+    return traceView("将 SOP 证据发送给 LLM", [
       `证据文档：${item.retrieved_doc_count ?? 0} 个`,
-      `Prompt 长度：${item.prompt_chars ?? "-"} 字符`,
-      `摘录数量：${item.excerpt_count ?? "-"} 条`
+      `已提取相关片段：${item.excerpt_count ?? "-"} 条`,
+      `上下文长度：${item.prompt_chars ?? "-"} 字符`
     ]);
   }
   if (event === "llm_call_started") {
-    return traceView("开始生成自然语言回答", [
-      `Prompt 长度：${item.prompt_chars ?? "-"} 字符`,
-      `输出预算：${item.max_tokens ?? "-"} tokens`
-    ]);
+    return traceView("整理回答", ["正在基于已读取 SOP 证据组织处理建议。"]);
   }
   if (event === "llm_call_succeeded") {
-    return traceView("自然语言回答生成成功", [
+    return traceView("回答已完成", [
       `耗时：${item.elapsed_seconds ?? "-"} 秒`,
       `回答长度：${item.final_answer_chars ?? item.answer_chars ?? "-"} 字符`,
       `结束原因：${item.finish_reason || "未标注"}`
@@ -808,12 +824,11 @@ function formatReadFileTrace(action, observation) {
   const filename = action.fname || "unknown";
   if (observation.ok && observation.accepted_as_source) {
     return traceView(`成功读取 ${filename}`, [
-      `文件 ${filename} 已读取并作为回答依据。`,
-      `大小：${observation.bytes ?? "-"} bytes`
+      `文件 ${filename} 已通过校验，并作为本轮回答依据。`
     ]);
   }
   if (observation.ok && filename === "manifest.json") {
-    return traceView("成功读取 manifest.json", ["已读取 SOP 文件清单，用于选择候选文档。"]);
+    return traceView("成功读取 SOP 清单", ["已读取 manifest.json，用于确定候选 SOP 文件。"]);
   }
   if (observation.ok) {
     return traceView(`已读取 ${filename}，未作为来源`, [

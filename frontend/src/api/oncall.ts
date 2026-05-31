@@ -160,16 +160,31 @@ function normalizeAnswer(value: unknown): string {
 }
 
 function toSearchAnswer(mode: OnCallMode, query: string, sources: OnCallSource[]): string {
-  const label = mode === "exact" ? "v1 exact search" : "v2 semantic search";
+  const label = mode === "exact" ? "V1 精确检索" : "V2 语义检索";
   if (!sources.length) {
-    return `${label} did not find matching SOP documents for "${query}".`;
+    return [
+      "1. 检索结果",
+      `${label} 未找到与「${query}」匹配的 SOP 文档。`,
+      "",
+      "2. 建议",
+      "请补充更具体的故障关键词、系统名称、错误码或告警信息后重试。"
+    ].join("\n");
   }
 
   const top = sources
     .slice(0, 3)
     .map((source) => source.id || source.title || source.filename || "source")
-    .join(", ");
-  return `${label} found ${sources.length} relevant SOP document(s) for "${query}". Start with ${top}. Review the source list below for titles, snippets, and scores.`;
+    .join("、");
+  return [
+    "1. 检索结果",
+    `${label} 找到 ${sources.length} 个相关 SOP 文档。`,
+    "",
+    "2. 优先查看",
+    top,
+    "",
+    "3. 说明",
+    "请结合下方 Sources 中的 title、snippet 和 score 判断具体处理顺序。"
+  ].join("\n");
 }
 
 function normalizeSources(value: unknown): OnCallSource[] {

@@ -94,14 +94,22 @@ def _rollback_to_v2_response(
 def _collect_trace(result: dict[str, Any], runtime: Any) -> list[dict[str, Any]]:
     trace: list[dict[str, Any]] = []
     agent_trace = result.get("trace", [])
+    answer_trace: list[dict[str, Any]] = []
     if isinstance(agent_trace, list):
-        trace.extend(item for item in agent_trace if isinstance(item, dict))
+        for item in agent_trace:
+            if not isinstance(item, dict):
+                continue
+            if item.get("stage") == "answer_composer":
+                answer_trace.append(item)
+            else:
+                trace.append(item)
 
     if isinstance(runtime, dict):
         runtime_trace = runtime.get("trace", [])
         if isinstance(runtime_trace, list):
             trace.extend(item for item in runtime_trace if isinstance(item, dict))
 
+    trace.extend(answer_trace)
     return trace
 
 

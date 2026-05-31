@@ -112,6 +112,53 @@ def test_v3_api_composes_answer_from_retrieved_sop_documents() -> None:
         assert source["filename"] in successful_reads
 
 
+def test_v3_api_trace_uses_call_stack_order(monkeypatch) -> None:
+    def fake_run_agent_once(query: str, **_: object):
+        return {
+            "ok": True,
+            "answer": "问题判断：根据已读取 SOP 回答。",
+            "sources": [{"filename": "sop-001.html", "title": "后端服务 On-Call SOP"}],
+            "trace": [
+                {"stage": "agent", "event": "tool_allowed"},
+                {"stage": "answer_composer", "event": "llm_client_created"},
+                {"stage": "answer_composer", "event": "prompt_built"},
+                {"stage": "answer_composer", "event": "llm_call_succeeded"},
+            ],
+            "runtime": {
+                "status": "finished",
+                "trace": [
+                    {
+                        "step": 0,
+                        "action": {"type": "readFile", "fname": "manifest.json"},
+                        "observation": {"ok": True, "accepted_as_source": False},
+                    },
+                    {
+                        "step": 1,
+                        "action": {"type": "readFile", "fname": "sop-001.html"},
+                        "observation": {"ok": True, "accepted_as_source": True},
+                    },
+                    {
+                        "step": 2,
+                        "action": {"type": "finish"},
+                        "observation": {"ok": True},
+                    },
+                ],
+            },
+        }
+
+    monkeypatch.setattr("app.api.run_agent_once", fake_run_agent_once)
+    client = TestClient(app)
+
+    response = client.post("/api/oncall/query", json={"query": "服务 OOM 了怎么办？"})
+
+    assert response.status_code == 200
+    events = response.json()["trace"]
+    tool_allowed_index = next(i for i, item in enumerate(events) if item.get("event") == "tool_allowed")
+    readfile_index = next(i for i, item in enumerate(events) if item.get("action", {}).get("type") == "readFile")
+    llm_start_index = next(i for i, item in enumerate(events) if item.get("event") == "llm_client_created")
+    assert tool_allowed_index < readfile_index < llm_start_index
+
+
 def test_v3_api_keeps_v3_evidence_when_answer_llm_fails(monkeypatch) -> None:
     class FailingAnswerComposer:
         def compose(self, user_query, retrieved_docs, sources, trace):
