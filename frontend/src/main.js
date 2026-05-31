@@ -722,18 +722,128 @@ function renderDebugPanel(session) {
 function renderTrace(traceItems) {
   traceCount.textContent = `${traceItems.length} steps`;
   traceList.innerHTML = traceItems
-    .map(
-      (item) => `
+    .map((item) => {
+      const view = formatTraceForUser(item);
+      return `
         <details class="trace-item">
           <summary>
             <span>${escapeHtml(item.step ?? "-")}</span>
-            <strong>${escapeHtml(item.event || item.stage || "trace")}</strong>
+            <strong>${escapeHtml(view.title)}</strong>
           </summary>
-          <pre>${escapeHtml(JSON.stringify(item, null, 2))}</pre>
+          <pre>${escapeHtml(view.pretty)}</pre>
+          <details class="trace-raw">
+            <summary>Raw trace</summary>
+            <pre>${escapeHtml(JSON.stringify(item, null, 2))}</pre>
+          </details>
         </details>
-      `
-    )
+      `;
+    })
     .join("");
+}
+
+function formatTraceForUser(item) {
+  const action = item.action || {};
+  const observation = item.observation || {};
+  if (action.type === "readFile") {
+    return formatReadFileTrace(action, observation);
+  }
+
+  const event = item.event || "";
+  if (event === "tool_allowed") {
+    return traceView("工具授权完成", [`已允许 Agent 使用 ${item.tool || "工具"}。`]);
+  }
+  if (event === "llm_client_created") {
+    return traceView("LLM 已连接", [
+      `模型客户端：${item.client_type || "unknown"}`,
+      `思考模式：${item.thinking || "未标注"}`,
+      `超时：${item.timeout_seconds ?? "-"} 秒`,
+      `输出预算：${item.max_tokens ?? "-"} tokens`
+    ]);
+  }
+  if (event === "prompt_built") {
+    return traceView("已整理 SOP 证据", [
+      `证据文档：${item.retrieved_doc_count ?? 0} 个`,
+      `Prompt 长度：${item.prompt_chars ?? "-"} 字符`,
+      `摘录数量：${item.excerpt_count ?? "-"} 条`
+    ]);
+  }
+  if (event === "llm_call_started") {
+    return traceView("开始生成自然语言回答", [
+      `Prompt 长度：${item.prompt_chars ?? "-"} 字符`,
+      `输出预算：${item.max_tokens ?? "-"} tokens`
+    ]);
+  }
+  if (event === "llm_call_succeeded") {
+    return traceView("自然语言回答生成成功", [
+      `耗时：${item.elapsed_seconds ?? "-"} 秒`,
+      `回答长度：${item.final_answer_chars ?? item.answer_chars ?? "-"} 字符`,
+      `结束原因：${item.finish_reason || "未标注"}`
+    ]);
+  }
+  if (event === "llm_answer_rejected") {
+    return traceView("LLM 回答不可用，已使用证据链兜底", [
+      `原因：${humanizeTraceReason(item.reason)}`,
+      `耗时：${item.elapsed_seconds ?? "-"} 秒`,
+      `结束原因：${item.finish_reason || "未标注"}`
+    ]);
+  }
+  if (event === "llm_call_failed") {
+    return traceView("LLM 调用失败，已使用证据链兜底", [
+      `错误类型：${item.error_type || "unknown"}`,
+      `错误信息：${item.error || "未提供"}`,
+      `耗时：${item.elapsed_seconds ?? "-"} 秒`
+    ]);
+  }
+  if (event === "deterministic_fallback") {
+    return traceView("已切换到 V3 证据链兜底回答", ["回答仍来自成功读取的 SOP 文件。"]);
+  }
+  if (event === "frontend_answer_received") {
+    return traceView("前端已收到回答", [`显示长度：${item.frontend_answer_chars ?? 0} 字符`]);
+  }
+
+  return traceView(item.event || item.stage || "执行步骤", [JSON.stringify(item, null, 2)]);
+}
+
+function formatReadFileTrace(action, observation) {
+  const filename = action.fname || "unknown";
+  if (observation.ok && observation.accepted_as_source) {
+    return traceView(`成功读取 ${filename}`, [
+      `文件 ${filename} 已读取并作为回答依据。`,
+      `大小：${observation.bytes ?? "-"} bytes`
+    ]);
+  }
+  if (observation.ok && filename === "manifest.json") {
+    return traceView("成功读取 manifest.json", ["已读取 SOP 文件清单，用于选择候选文档。"]);
+  }
+  if (observation.ok) {
+    return traceView(`已读取 ${filename}，未作为来源`, [
+      `原因：${humanizeTraceReason(observation.reject_reason)}`
+    ]);
+  }
+  return traceView(`读取 ${filename} 失败`, [
+    `错误：${observation.error || "未知错误"}`
+  ]);
+}
+
+function traceView(title, lines) {
+  return {
+    title,
+    pretty: lines.filter(Boolean).join("\n")
+  };
+}
+
+function humanizeTraceReason(reason) {
+  const labels = {
+    manifest_not_source: "manifest 只是清单，不作为回答来源",
+    read_failed: "文件读取失败",
+    empty_tool_content: "文件内容为空",
+    not_manifest_candidate: "文件不在本轮候选 SOP 中",
+    title_mismatch: "文件标题校验不一致",
+    max_tokens_exhausted_before_visible_answer: "模型输出预算在可见回答前耗尽",
+    empty_answer: "模型返回空回答",
+    runtime_status: "模型返回了 runtime 状态文本"
+  };
+  return labels[reason] || reason || "未标注";
 }
 
 function escapeHtml(value) {

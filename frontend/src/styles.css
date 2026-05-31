@@ -1064,7 +1064,8 @@ h1 {
   white-space: nowrap;
 }
 
-.trace-item pre {
+.trace-item pre,
+.trace-raw pre {
   margin: 0;
   padding: 0 14px 14px 50px;
   color: #969696;
@@ -1074,6 +1075,22 @@ h1 {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.trace-raw {
+  border-top: 1px solid #242426;
+}
+
+.trace-raw summary {
+  min-height: 38px;
+  padding-left: 50px;
+  color: #858585;
+  font-size: 12px;
+}
+
+.trace-raw pre {
+  color: #7f7f82;
+  font-size: 12px;
 }
 
 .context-menu {
